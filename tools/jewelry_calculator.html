@@ -1,0 +1,1275 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>보석 태그 계산기</title>
+  <style>
+    :root {
+      --bg: #f4f6f7;
+      --panel: #ffffff;
+      --text: #172026;
+      --muted: #69757f;
+      --line: #d7dee3;
+      --soft: #eef3f4;
+      --accent: #0f766e;
+      --accent-dark: #0a5e58;
+      --danger: #a33a1f;
+      --focus: #bfdbfe;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "Malgun Gothic", Arial, sans-serif;
+      font-size: 14px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      font-size: 21px;
+    }
+
+    h2 {
+      font-size: 15px;
+    }
+
+    h3 {
+      font-size: 13px;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(360px, 0.95fr) minmax(0, 1.35fr);
+      gap: 16px;
+      padding: 16px;
+    }
+
+    section {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 50px;
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfc;
+    }
+
+    .content {
+      display: grid;
+      gap: 14px;
+      padding: 12px;
+    }
+
+    .mode-tabs {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+    }
+
+    button,
+    .file-button,
+    select,
+    textarea,
+    input {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+    }
+
+    button,
+    .file-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
+      padding: 0 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    button:hover,
+    .file-button:hover {
+      border-color: var(--accent);
+    }
+
+    button.primary,
+    .file-button.primary,
+    .mode-tabs button.active {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+
+    button.primary:hover,
+    .file-button.primary:hover {
+      background: var(--accent-dark);
+    }
+
+    button.danger {
+      margin-left: auto;
+      border-color: #c2410c;
+      background: #fff7ed;
+      color: #9a3412;
+      font-weight: 700;
+    }
+
+    button.danger:hover {
+      border-color: #9a3412;
+      background: #ffedd5;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 220px;
+      padding: 10px;
+      resize: vertical;
+      line-height: 1.5;
+      font-family: Consolas, "Malgun Gothic", monospace;
+    }
+
+    textarea:focus,
+    select:focus,
+    input:focus,
+    button:focus {
+      outline: 3px solid var(--focus);
+      outline-offset: 1px;
+    }
+
+    select,
+    input {
+      width: 100%;
+      height: 36px;
+      padding: 0 8px;
+    }
+
+    input[type="file"] {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      opacity: 0;
+    }
+
+    label {
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .csv-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .priority-options {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fbfcfc;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .hint,
+    .notice {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .notice.error {
+      color: var(--danger);
+    }
+
+    .swap-highlight {
+      min-height: 44px;
+      margin-bottom: 12px;
+      padding: 12px;
+      border: 1px solid #0f766e;
+      border-radius: 6px;
+      background: #ccfbf1;
+      color: #0f3f3a;
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1.5;
+    }
+
+    .swap-highlight:empty {
+      display: none;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .metric {
+      min-height: 68px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fbfcfc;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 6px;
+      font-size: 21px;
+      letter-spacing: 0;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
+      gap: 12px;
+    }
+
+    .wide-result {
+      grid-column: 1 / -1;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: calc(100vh - 265px);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      white-space: nowrap;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: var(--soft);
+      z-index: 1;
+      font-weight: 800;
+    }
+
+    td.wrap {
+      white-space: normal;
+      min-width: 180px;
+      line-height: 1.45;
+    }
+
+    .tag-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .tag-row {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr) 58px;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .bar {
+      height: 8px;
+      border-radius: 999px;
+      background: var(--soft);
+      overflow: hidden;
+    }
+
+    .bar > span {
+      display: block;
+      height: 100%;
+      background: var(--accent);
+    }
+
+    .empty {
+      padding: 20px;
+      border: 1px dashed var(--line);
+      border-radius: 6px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    @media (max-width: 940px) {
+      main,
+      .result-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .table-wrap {
+        max-height: 420px;
+      }
+    }
+
+    @media (max-width: 620px) {
+      header,
+      .section-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .mode-tabs,
+      .metric-grid,
+      .csv-options,
+      .priority-options {
+        grid-template-columns: 1fr;
+      }
+
+      button.danger {
+        width: 100%;
+        margin-left: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>보석 태그 계산기</h1>
+  </header>
+
+  <main>
+    <section>
+      <div class="section-head">
+        <h2>보석 태그 입력</h2>
+      </div>
+      <div class="content">
+        <div class="mode-tabs" role="tablist" aria-label="입력 방식">
+          <button class="active" type="button" data-mode="text">텍스트 입력</button>
+          <button type="button" data-mode="csv-file">CSV 파일</button>
+        </div>
+
+        <div id="textPane">
+          <textarea id="textInput" spellcheck="false" placeholder="태그,개수&#10;원연방,2&#10;연원방,3&#10;강이&#10;&#10;또는&#10;&#10;원연방 2&#10;연원방 3&#10;강이"></textarea>
+        </div>
+
+        <div id="csvFilePane" class="hidden">
+          <label class="file-button primary" for="csvFile">CSV 파일 선택</label>
+          <input id="csvFile" type="file" accept=".csv,text/csv">
+          <p id="fileName" class="hint">선택된 파일이 없습니다.</p>
+        </div>
+
+        <div class="csv-options hidden" id="csvOptions">
+          <label>
+            태그 컬럼
+            <select id="tagColumn"></select>
+          </label>
+          <label>
+            개수 컬럼
+            <select id="countColumn"></select>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button id="analyzeButton" class="primary" type="button">분석하기</button>
+          <button id="sampleButton" type="button">예시 넣기</button>
+          <button id="clearButton" class="danger" type="button">초기화</button>
+        </div>
+
+        <div class="hint">
+          태그는 강타, 연타, 원소, 이동, 생존, 소환, 보조, 방해의 앞글자인 강, 연, 원, 이, 생, 소, 보, 방으로 입력합니다. 개수가 없으면 1개로 계산합니다.
+        </div>
+        <div id="notice" class="notice"></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>분석 결과</h2>
+      </div>
+      <div class="content">
+        <div class="metric-grid">
+          <div class="metric"><span>입력 수</span><strong id="inputRows">0</strong></div>
+          <div class="metric"><span>총 개수</span><strong id="totalCount">0</strong></div>
+          <div class="metric"><span>조합 수</span><strong id="groupCount">0</strong></div>
+        </div>
+
+        <div class="result-grid">
+          <div>
+            <div class="section-head">
+              <h3>보석 태그 목록</h3>
+            </div>
+            <div class="table-wrap">
+              <table id="groupTable">
+                <thead>
+                  <tr>
+                    <th>보석 태그</th>
+                    <th>개수</th>
+                    <th>입력 태그</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="3"><div class="empty">분석 결과가 여기에 표시됩니다.</div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <div class="section-head">
+              <h3>태그별 개수</h3>
+            </div>
+            <div id="tagSummary" class="tag-list">
+              <div class="empty">분석 결과가 여기에 표시됩니다.</div>
+            </div>
+          </div>
+
+          <div class="wide-result">
+            <div class="section-head">
+              <h3>태그 교환 추천</h3>
+            </div>
+            <div class="content">
+              <div class="priority-options">
+                <label>
+                  1순위 태그 조합
+                  <input id="priority1" type="text" autocomplete="off" placeholder="예: 원연방, 강이">
+                </label>
+                <label>
+                  2순위 태그 조합
+                  <input id="priority2" type="text" autocomplete="off" placeholder="예: 생소보 방연">
+                </label>
+                <label>
+                  3순위 태그 조합
+                  <input id="priority3" type="text" autocomplete="off" placeholder="예: 원, 보방">
+                </label>
+              </div>
+              <div class="hint">각 조합은 최대 3개 태그까지 입력합니다. 같은 순위에 여러 조합을 넣을 때는 쉼표나 공백으로 구분합니다. 1~2개 태그 조합은 해당 태그를 포함한 모든 조합으로 계산합니다.</div>
+              <div class="actions">
+                <button id="recommendButton" class="primary" type="button">계산하기</button>
+              </div>
+            </div>
+            <div id="swapSummary" class="swap-highlight"></div>
+            <div class="table-wrap">
+              <table id="swapTable">
+                <thead>
+                  <tr>
+                    <th>순위</th>
+                    <th>목표 조합</th>
+                    <th>현재 개수</th>
+                    <th>추천 후</th>
+                    <th>변화</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="5"><div class="empty">분석 후 우선순위 조합을 입력하고 추천을 실행하세요.</div></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="section-head">
+              <h3>교환 후 보석 태그 목록</h3>
+            </div>
+            <div class="table-wrap">
+              <table id="afterSwapTable">
+                <thead>
+                  <tr>
+                    <th>보석 태그</th>
+                    <th>개수</th>
+                    <th>입력 태그</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="3"><div class="empty">계산하면 결과가 표시됩니다.</div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const TAGS = [
+      { short: "강", name: "강타" },
+      { short: "연", name: "연타" },
+      { short: "원", name: "원소" },
+      { short: "이", name: "이동" },
+      { short: "생", name: "생존" },
+      { short: "소", name: "소환" },
+      { short: "보", name: "보조" },
+      { short: "방", name: "방해" }
+    ];
+    const TAG_ORDER = new Map(TAGS.map((tag, index) => [tag.short, index]));
+    const VALID_TAGS = new Set(TAGS.map(tag => tag.short));
+    const DEFAULT_COUNT_COLUMN = "__default_count__";
+
+    const state = {
+      mode: "text",
+      csvFileText: "",
+      fileName: "",
+      csvRows: [],
+      csvColumns: [],
+      lastResult: null,
+      resultText: ""
+    };
+
+    const panes = {
+      "csv-file": document.getElementById("csvFilePane"),
+      "text": document.getElementById("textPane")
+    };
+    const csvOptions = document.getElementById("csvOptions");
+    const csvFile = document.getElementById("csvFile");
+    const fileName = document.getElementById("fileName");
+    const textInput = document.getElementById("textInput");
+    const tagColumn = document.getElementById("tagColumn");
+    const countColumn = document.getElementById("countColumn");
+    const priorityInputs = [
+      document.getElementById("priority1"),
+      document.getElementById("priority2"),
+      document.getElementById("priority3")
+    ];
+    const notice = document.getElementById("notice");
+    const inputRows = document.getElementById("inputRows");
+    const totalCount = document.getElementById("totalCount");
+    const groupCount = document.getElementById("groupCount");
+    const groupTableBody = document.querySelector("#groupTable tbody");
+    const swapTableBody = document.querySelector("#swapTable tbody");
+    const afterSwapTableBody = document.querySelector("#afterSwapTable tbody");
+    const swapSummary = document.getElementById("swapSummary");
+    const tagSummary = document.getElementById("tagSummary");
+
+    document.querySelectorAll("[data-mode]").forEach(button => {
+      button.addEventListener("click", () => setMode(button.dataset.mode));
+    });
+    csvFile.addEventListener("change", readCsvFile);
+    document.getElementById("analyzeButton").addEventListener("click", analyze);
+    document.getElementById("recommendButton").addEventListener("click", recommendSwaps);
+    document.getElementById("sampleButton").addEventListener("click", insertSample);
+    document.getElementById("clearButton").addEventListener("click", clearAll);
+
+    setMode("text");
+
+    function setMode(mode) {
+      state.mode = mode;
+      document.querySelectorAll("[data-mode]").forEach(button => {
+        button.classList.toggle("active", button.dataset.mode === mode);
+      });
+      Object.entries(panes).forEach(([paneMode, pane]) => {
+        pane.classList.toggle("hidden", paneMode !== mode);
+      });
+      csvOptions.classList.toggle("hidden", mode === "text");
+      setNotice("");
+
+      if (mode === "csv-file") updateCsvColumnSelects(state.csvRows, state.csvColumns);
+    }
+
+    function readCsvFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          state.csvFileText = String(reader.result || "");
+          state.fileName = file.name;
+          const parsed = parseCsv(state.csvFileText);
+          state.csvRows = parsed.rows;
+          state.csvColumns = parsed.columns;
+          fileName.textContent = file.name;
+          updateCsvColumnSelects(parsed.rows, parsed.columns);
+          setNotice("");
+        } catch (error) {
+          setNotice(error.message, true);
+        }
+      };
+      reader.onerror = () => setNotice("파일을 읽는 중 문제가 발생했습니다.", true);
+      reader.readAsText(file, "utf-8");
+    }
+
+    function updateCsvColumnSelects(rows, columns) {
+      fillSelect(tagColumn, columns);
+      fillSelect(countColumn, columns, "개수 없음 (모두 1개)");
+
+      const tagGuess = guessColumn(columns, ["태그", "tag", "type", "타입", "조합"], true);
+      const countGuess = guessColumn(columns, ["개수", "count", "cnt", "수량", "qty"], false);
+      if (tagGuess) tagColumn.value = tagGuess;
+      countColumn.value = countGuess || DEFAULT_COUNT_COLUMN;
+
+      state.csvRows = rows;
+      state.csvColumns = columns;
+    }
+
+    function fillSelect(select, values, defaultLabel = "") {
+      select.innerHTML = "";
+      if (defaultLabel) {
+        const option = document.createElement("option");
+        option.value = DEFAULT_COUNT_COLUMN;
+        option.textContent = defaultLabel;
+        select.append(option);
+      }
+      values.forEach(value => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        select.append(option);
+      });
+    }
+
+    function guessColumn(columns, names, useFallback) {
+      const lowered = names.map(name => name.toLowerCase());
+      return columns.find(column => lowered.includes(String(column).trim().toLowerCase())) || (useFallback ? columns[0] || "" : "");
+    }
+
+    function analyze() {
+      try {
+        const entries = getEntries();
+        if (entries.length === 0) throw new Error("분석할 데이터가 없습니다.");
+        const result = aggregate(entries);
+        state.lastResult = result;
+        renderResult(result);
+        renderSwapRecommendation(null);
+        setNotice("");
+      } catch (error) {
+        setNotice(error.message, true);
+      }
+    }
+
+    function recommendSwaps() {
+      try {
+        if (!state.lastResult) throw new Error("먼저 데이터를 분석해주세요.");
+        const priorityTiers = getPriorityTiers();
+        if (priorityTiers.length === 0) throw new Error("우선순위 조합을 하나 이상 입력해주세요.");
+        state.lastResult.recommendation = buildSwapRecommendation(state.lastResult.groups, priorityTiers);
+        renderSwapRecommendation(state.lastResult.recommendation);
+        state.resultText = buildResultText(state.lastResult);
+        setNotice("");
+      } catch (error) {
+        setNotice(error.message, true);
+      }
+    }
+
+    function getEntries() {
+      if (state.mode === "csv-file") {
+        if (!state.csvFileText) throw new Error("CSV 파일을 먼저 선택해주세요.");
+        return entriesFromCsvRows(state.csvRows);
+      }
+
+      const text = textInput.value.trim();
+      if (!text) throw new Error("텍스트를 입력해주세요.");
+      return entriesFromText(text);
+    }
+
+    function entriesFromCsvRows(rows) {
+      const tagKey = tagColumn.value;
+      const countKey = countColumn.value;
+      if (!tagKey) throw new Error("태그 컬럼을 선택해주세요.");
+
+      return rows.map((row, index) => {
+        const rawTags = String(row[tagKey] || "").trim();
+        const count = countKey === DEFAULT_COUNT_COLUMN ? 1 : parseCount(row[countKey], 1);
+        if (!rawTags) throw new Error(`${index + 2}번째 행의 태그가 비어 있습니다.`);
+        if (!Number.isFinite(count)) throw new Error(`${index + 2}번째 행의 개수가 숫자가 아닙니다.`);
+        return normalizeEntry(rawTags, count, index + 2);
+      });
+    }
+
+    function entriesFromText(text) {
+      if (text.includes(",")) return entriesFromCsvText(text);
+      return entriesFromPairText(text);
+    }
+
+    function entriesFromCsvText(text) {
+      const rows = parseCsvRows(text);
+      const firstRow = rows[0] || [];
+      const hasHeader = firstRow.some(value => isKnownColumnName(value));
+      const dataRows = hasHeader ? rows.slice(1) : rows;
+      const columns = hasHeader ? firstRow.map((value, index) => value.trim() || `컬럼${index + 1}`) : ["태그", "개수"];
+      const tagIndex = hasHeader ? Math.max(0, columns.indexOf(guessColumn(columns, ["태그", "tag", "type", "타입", "조합"], true))) : 0;
+      const countGuess = hasHeader ? guessColumn(columns, ["개수", "count", "cnt", "수량", "qty"], false) : "개수";
+      const countIndex = hasHeader && countGuess ? columns.indexOf(countGuess) : 1;
+
+      return dataRows.map((row, index) => {
+        const rawTags = String(row[tagIndex] || "").trim();
+        const count = parseCount(row[countIndex], 1);
+        if (!rawTags) throw new Error(`${index + (hasHeader ? 2 : 1)}번째 행의 태그가 비어 있습니다.`);
+        if (!Number.isFinite(count)) throw new Error(`${index + (hasHeader ? 2 : 1)}번째 행의 개수가 숫자가 아닙니다.`);
+        return normalizeEntry(rawTags, count, index + (hasHeader ? 2 : 1));
+      });
+    }
+
+    function entriesFromPairText(text) {
+      return text.split(/\r?\n/).map((line, index) => {
+        const trimmed = line.trim();
+        if (!trimmed) return null;
+        const parts = trimmed.split(/\s+/);
+        const countText = parts.length > 1 ? parts.pop() : "";
+        const rawTags = parts.join("");
+        const count = parseCount(countText, 1);
+        if (!Number.isFinite(count)) throw new Error(`${index + 1}번째 줄의 개수가 숫자가 아닙니다.`);
+        return normalizeEntry(rawTags, count, index + 1);
+      }).filter(Boolean);
+    }
+
+    function normalizeEntry(rawTags, count, lineNumber) {
+      const tags = Array.from(String(rawTags).replace(/\s+/g, ""));
+      if (tags.length === 0) throw new Error(`${lineNumber}번째 데이터의 태그가 비어 있습니다.`);
+
+      const invalid = tags.filter(tag => !VALID_TAGS.has(tag));
+      if (invalid.length > 0) {
+        throw new Error(`${lineNumber}번째 데이터에 알 수 없는 태그가 있습니다: ${Array.from(new Set(invalid)).join(", ")}`);
+      }
+      if (count < 0) throw new Error(`${lineNumber}번째 데이터의 개수는 0 이상이어야 합니다.`);
+
+      const canonical = tags.slice().sort(compareTags).join("");
+      return {
+        raw: rawTags,
+        canonical,
+        tags,
+        count
+      };
+    }
+
+    function parseCount(value, fallback = NaN) {
+      const cleaned = String(value || "").replaceAll(",", "").trim();
+      if (!cleaned) return fallback;
+      return Number(cleaned);
+    }
+
+    function compareTags(a, b) {
+      return TAG_ORDER.get(a) - TAG_ORDER.get(b);
+    }
+
+    function aggregate(entries) {
+      const groups = new Map();
+      const tagCounts = new Map(TAGS.map(tag => [tag.short, 0]));
+      let total = 0;
+
+      entries.forEach(entry => {
+        total += entry.count;
+        entry.tags.forEach(tag => {
+          tagCounts.set(tag, tagCounts.get(tag) + entry.count);
+        });
+
+        if (!groups.has(entry.canonical)) {
+          groups.set(entry.canonical, {
+            canonical: entry.canonical,
+            count: 0,
+            forms: new Map()
+          });
+        }
+        const group = groups.get(entry.canonical);
+        group.count += entry.count;
+        group.forms.set(entry.raw, (group.forms.get(entry.raw) || 0) + entry.count);
+      });
+
+      return {
+        inputRows: entries.length,
+        total,
+        groups: Array.from(groups.values()).sort((a, b) => b.count - a.count || a.canonical.localeCompare(b.canonical, "ko")),
+        tagCounts
+      };
+    }
+
+    function renderResult(result) {
+      inputRows.textContent = formatNumber(result.inputRows);
+      totalCount.textContent = formatNumber(result.total);
+      groupCount.textContent = formatNumber(result.groups.length);
+
+      groupTableBody.innerHTML = "";
+      result.groups.forEach(group => {
+        const tr = document.createElement("tr");
+        tr.append(cell(group.canonical));
+        tr.append(cell(formatNumber(group.count)));
+        tr.append(cell(formatForms(group.forms), "wrap"));
+        groupTableBody.append(tr);
+      });
+
+      const maxTagCount = Math.max(...Array.from(result.tagCounts.values()), 1);
+      tagSummary.innerHTML = "";
+      TAGS.forEach(tag => {
+        const count = result.tagCounts.get(tag.short) || 0;
+        const row = document.createElement("div");
+        row.className = "tag-row";
+        row.innerHTML = `
+          <strong>${tag.name}</strong>
+          <div class="bar"><span style="width: ${(count / maxTagCount) * 100}%"></span></div>
+          <span>${formatNumber(count)}</span>
+        `;
+        tagSummary.append(row);
+      });
+
+      state.resultText = buildResultText(result);
+      renderSwapRecommendation(result.recommendation);
+    }
+
+    function cell(text, className = "") {
+      const td = document.createElement("td");
+      td.textContent = text;
+      if (className) td.className = className;
+      return td;
+    }
+
+    function formatForms(forms) {
+      return Array.from(forms.entries())
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko"))
+        .map(([form, count]) => `${form} ${formatNumber(count)}`)
+        .join(", ");
+    }
+
+    function buildResultText(result) {
+      const lines = [
+        `입력 수: ${formatNumber(result.inputRows)}`,
+        `총 개수: ${formatNumber(result.total)}`,
+        `조합 수: ${formatNumber(result.groups.length)}`,
+        "",
+        "[보석 태그 목록]",
+        "보석 태그,개수,입력 태그"
+      ];
+
+      result.groups.forEach(group => {
+        lines.push(`${group.canonical},${group.count},"${formatForms(group.forms)}"`);
+      });
+
+      lines.push("", "[태그별 개수]", "태그,이름,개수");
+      TAGS.forEach(tag => {
+        lines.push(`${tag.short},${tag.name},${result.tagCounts.get(tag.short) || 0}`);
+      });
+
+      if (result.recommendation && result.recommendation.priorityTiers.length > 0) {
+        lines.push("", "[태그 교환 추천]");
+        lines.push(`추천 교환 : ${result.recommendation.swaps.length ? result.recommendation.swaps.join(" / ") : "교환 없음"}`);
+        lines.push("순위,목표 조합,현재 개수,추천 후,변화");
+        result.recommendation.rows.forEach(row => {
+          lines.push(`${row.rank},${row.comboName},${row.before},${row.after},${row.after - row.before}`);
+        });
+        lines.push("", "[교환 후 보석 태그 목록]");
+        lines.push("보석 태그,개수,입력 태그");
+        result.recommendation.afterGroups.forEach(group => {
+          lines.push(`${group.canonical},${group.count},"${formatForms(group.forms)}"`);
+        });
+      }
+      return lines.join("\n");
+    }
+
+    function getPriorityTiers() {
+      const tiers = priorityInputs
+        .map(input => parsePriorityTier(input.value))
+        .filter(tier => tier.length > 0);
+      const allCombos = tiers.flat();
+      const duplicates = allCombos.filter((combo, index) => allCombos.indexOf(combo) !== index);
+      if (duplicates.length > 0) {
+        throw new Error(`우선순위 조합이 중복되었습니다: ${Array.from(new Set(duplicates)).join(", ")}`);
+      }
+      return tiers;
+    }
+
+    function parsePriorityTier(value) {
+      return String(value || "")
+        .split(/[,\s]+/)
+        .map(part => part.trim())
+        .filter(Boolean)
+        .map(normalizePriorityCombo);
+    }
+
+    function normalizePriorityCombo(value) {
+      const cleaned = String(value || "").replace(/\s+/g, "").trim();
+      if (!cleaned) return "";
+
+      let tags = [];
+      let remaining = cleaned;
+      while (remaining.length > 0) {
+        const byName = TAGS.find(tag => remaining.startsWith(tag.name));
+        if (byName) {
+          tags.push(byName.short);
+          remaining = remaining.slice(byName.name.length);
+          continue;
+        }
+        const shortTag = remaining[0];
+        if (!VALID_TAGS.has(shortTag)) {
+          throw new Error(`알 수 없는 우선순위 조합입니다: ${value}`);
+        }
+        tags.push(shortTag);
+        remaining = remaining.slice(1);
+      }
+
+      if (tags.length > 3) throw new Error(`우선순위 조합은 최대 3개 태그까지 입력할 수 있습니다: ${value}`);
+      const duplicates = tags.filter((tag, index) => tags.indexOf(tag) !== index);
+      if (duplicates.length > 0) throw new Error(`우선순위 조합 안에 같은 태그가 반복되었습니다: ${value}`);
+      return tags.sort(compareTags).join("");
+    }
+
+    function buildSwapRecommendation(groups, priorityTiers) {
+      if (priorityTiers.length === 0) {
+        return { priorityTiers: [], swaps: [], rows: [] };
+      }
+
+      const permutations = buildPermutations(TAGS.map(tag => tag.short));
+      let best = null;
+
+      permutations.forEach(permutation => {
+        const sourceToTarget = new Map();
+        TAGS.forEach((tag, index) => {
+          sourceToTarget.set(tag.short, permutation[index]);
+        });
+
+        const mappedCounts = countMappedCombos(groups, sourceToTarget);
+        const score = priorityTiers.map(tier => sumTierCount(tier, mappedCounts));
+        const swaps = swapsForMapping(sourceToTarget);
+
+        if (!best || compareScore(score, swaps.length, best.score, best.swaps.length) > 0) {
+          best = { sourceToTarget, mappedCounts, score, swaps };
+        }
+      });
+
+      const currentCounts = new Map(groups.map(group => [group.canonical, group.count]));
+      const rows = priorityTiers.flatMap((tier, tierIndex) => tier.map(combo => {
+        const before = countIncludedCombos(combo, currentCounts);
+        const after = countIncludedCombos(combo, best.mappedCounts);
+        return {
+          rank: tierIndex + 1,
+          combo,
+          comboName: formatCombo(combo),
+          before,
+          after
+        };
+      }));
+
+      const afterGroups = buildMappedGroups(groups, best.sourceToTarget);
+
+      return { priorityTiers, swaps: best.swaps, rows, afterGroups };
+    }
+
+    function sumTierCount(tier, counts) {
+      return tier.reduce((total, combo) => total + countIncludedCombos(combo, counts), 0);
+    }
+
+    function countIncludedCombos(targetCombo, counts) {
+      let total = 0;
+      counts.forEach((count, combo) => {
+        if (includesCombo(combo, targetCombo)) total += count;
+      });
+      return total;
+    }
+
+    function includesCombo(combo, targetCombo) {
+      return Array.from(targetCombo).every(tag => combo.includes(tag));
+    }
+
+    function buildPermutations(items) {
+      const result = [];
+      const used = new Set();
+      const current = [];
+
+      function visit() {
+        if (current.length === items.length) {
+          result.push(current.slice());
+          return;
+        }
+        items.forEach(item => {
+          if (used.has(item)) return;
+          used.add(item);
+          current.push(item);
+          visit();
+          current.pop();
+          used.delete(item);
+        });
+      }
+
+      visit();
+      return result;
+    }
+
+    function countMappedCombos(groups, sourceToTarget) {
+      const counts = new Map();
+      groups.forEach(group => {
+        const mapped = mapCombo(group.canonical, sourceToTarget);
+        counts.set(mapped, (counts.get(mapped) || 0) + group.count);
+      });
+      return counts;
+    }
+
+    function buildMappedGroups(groups, sourceToTarget) {
+      const mappedGroups = new Map();
+      groups.forEach(group => {
+        const canonical = mapCombo(group.canonical, sourceToTarget);
+        if (!mappedGroups.has(canonical)) {
+          mappedGroups.set(canonical, {
+            canonical,
+            count: 0,
+            forms: new Map()
+          });
+        }
+
+        const mappedGroup = mappedGroups.get(canonical);
+        mappedGroup.count += group.count;
+        group.forms.forEach((count, form) => {
+          const mappedForm = mapCombo(form, sourceToTarget);
+          mappedGroup.forms.set(mappedForm, (mappedGroup.forms.get(mappedForm) || 0) + count);
+        });
+      });
+
+      return Array.from(mappedGroups.values()).sort((a, b) => b.count - a.count || a.canonical.localeCompare(b.canonical, "ko"));
+    }
+
+    function mapCombo(combo, sourceToTarget) {
+      return Array.from(String(combo).replace(/\s+/g, ""))
+        .map(tag => sourceToTarget.get(tag) || tag)
+        .sort(compareTags)
+        .join("");
+    }
+
+    function compareScore(score, swapCount, bestScore, bestSwapCount) {
+      for (let index = 0; index < score.length; index += 1) {
+        if (score[index] !== bestScore[index]) return score[index] - bestScore[index];
+      }
+      return bestSwapCount - swapCount;
+    }
+
+    function swapsForMapping(sourceToTarget) {
+      const current = new Map(TAGS.map(tag => [tag.short, tag.short]));
+      const swaps = [];
+
+      TAGS.forEach(source => {
+        const sourceTag = source.short;
+        const desiredLabel = sourceToTarget.get(sourceTag);
+        const currentLabel = current.get(sourceTag);
+        if (currentLabel === desiredLabel) return;
+
+        const otherSource = TAGS.find(candidate => current.get(candidate.short) === desiredLabel).short;
+        swaps.push(`${getTagName(currentLabel)} ↔ ${getTagName(desiredLabel)}`);
+
+        current.set(sourceTag, desiredLabel);
+        current.set(otherSource, currentLabel);
+      });
+
+      return swaps;
+    }
+
+    function renderSwapRecommendation(recommendation) {
+      if (!recommendation || recommendation.priorityTiers.length === 0) {
+        swapTableBody.innerHTML = '<tr><td colspan="5"><div class="empty">분석 후 우선순위 조합을 입력하고 추천을 실행하세요.</div></td></tr>';
+        afterSwapTableBody.innerHTML = '<tr><td colspan="3"><div class="empty">계산하면 결과가 표시됩니다.</div></td></tr>';
+        swapSummary.textContent = "";
+        return;
+      }
+
+      swapTableBody.innerHTML = "";
+      recommendation.rows.forEach(row => {
+        const tr = document.createElement("tr");
+        tr.append(cell(`${row.rank}순위`));
+        tr.append(cell(row.comboName));
+        tr.append(cell(formatNumber(row.before)));
+        tr.append(cell(formatNumber(row.after)));
+        tr.append(cell(formatSignedNumber(row.after - row.before)));
+        swapTableBody.append(tr);
+      });
+
+      afterSwapTableBody.innerHTML = "";
+      recommendation.afterGroups.forEach(group => {
+        const tr = document.createElement("tr");
+        tr.append(cell(group.canonical));
+        tr.append(cell(formatNumber(group.count)));
+        tr.append(cell(formatForms(group.forms), "wrap"));
+        afterSwapTableBody.append(tr);
+      });
+
+      swapSummary.textContent = recommendation.swaps.length
+        ? `추천 교환 :  ${recommendation.swaps.join(" / ")}`
+        : "이미 우선순위에 맞게 배치되어 있어 교환이 필요 없습니다.";
+    }
+
+    function getTagName(shortName) {
+      return TAGS.find(tag => tag.short === shortName).name;
+    }
+
+    function formatCombo(combo) {
+      const names = Array.from(combo).map(getTagName).join("+");
+      return `${combo} (${names})`;
+    }
+
+    function parseCsv(text) {
+      const rows = parseCsvRows(text);
+      if (rows.length === 0) throw new Error("CSV 내용이 비어 있습니다.");
+
+      const columns = rows[0].map((column, index) => column.trim() || `컬럼${index + 1}`);
+      const dataRows = rows.slice(1).map(values => {
+        const item = {};
+        columns.forEach((column, index) => {
+          item[column] = String(values[index] || "").trim();
+        });
+        return item;
+      });
+
+      return { columns, rows: dataRows };
+    }
+
+    function parseCsvRows(text) {
+      const rows = [];
+      let row = [];
+      let cell = "";
+      let inQuotes = false;
+
+      for (let i = 0; i < text.length; i += 1) {
+        const char = text[i];
+        const next = text[i + 1];
+        if (char === '"') {
+          if (inQuotes && next === '"') {
+            cell += '"';
+            i += 1;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === "," && !inQuotes) {
+          row.push(cell);
+          cell = "";
+        } else if ((char === "\n" || char === "\r") && !inQuotes) {
+          if (char === "\r" && next === "\n") i += 1;
+          row.push(cell);
+          if (row.some(value => value.trim() !== "")) rows.push(row);
+          row = [];
+          cell = "";
+        } else {
+          cell += char;
+        }
+      }
+
+      row.push(cell);
+      if (row.some(value => value.trim() !== "")) rows.push(row);
+      return rows;
+    }
+
+    function isKnownColumnName(value) {
+      const normalized = String(value || "").trim().toLowerCase();
+      return ["태그", "tag", "type", "타입", "조합", "개수", "count", "cnt", "수량", "qty"].includes(normalized);
+    }
+
+    function insertSample() {
+      const sample = [
+        "원연방 2",
+        "연원방 3",
+        "방연원",
+        "방연원 1",
+        "강이",
+        "이강 2",
+        "생소보 5"
+      ].join("\n");
+      setMode("text");
+      textInput.value = sample;
+      analyze();
+    }
+
+    function clearAll() {
+      csvFile.value = "";
+      textInput.value = "";
+      state.csvFileText = "";
+      state.fileName = "";
+      state.csvRows = [];
+      state.csvColumns = [];
+      state.lastResult = null;
+      state.resultText = "";
+      priorityInputs.forEach(input => {
+        input.value = "";
+      });
+      fileName.textContent = "선택된 파일이 없습니다.";
+      updateCsvColumnSelects([], []);
+      renderEmpty();
+      setNotice("");
+    }
+
+    function renderEmpty() {
+      inputRows.textContent = "0";
+      totalCount.textContent = "0";
+      groupCount.textContent = "0";
+      groupTableBody.innerHTML = '<tr><td colspan="3"><div class="empty">분석 결과가 여기에 표시됩니다.</div></td></tr>';
+      tagSummary.innerHTML = '<div class="empty">분석 결과가 여기에 표시됩니다.</div>';
+      swapTableBody.innerHTML = '<tr><td colspan="5"><div class="empty">분석 후 우선순위 조합을 입력하고 추천을 실행하세요.</div></td></tr>';
+      afterSwapTableBody.innerHTML = '<tr><td colspan="3"><div class="empty">계산하면 결과가 표시됩니다.</div></td></tr>';
+      swapSummary.textContent = "";
+    }
+
+    function saveResult() {
+      if (!state.resultText.trim()) {
+        setNotice("저장할 결과가 없습니다.", true);
+        return;
+      }
+      const blob = new Blob([state.resultText], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "tag_summary.csv";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function setNotice(message, isError = false) {
+      notice.textContent = message;
+      notice.classList.toggle("error", isError);
+    }
+
+    function formatNumber(value) {
+      return Number(value).toLocaleString("ko-KR", {
+        maximumFractionDigits: 2
+      });
+    }
+
+    function formatSignedNumber(value) {
+      const formatted = formatNumber(value);
+      return value > 0 ? `+${formatted}` : formatted;
+    }
+  </script>
+</body>
+</html>
