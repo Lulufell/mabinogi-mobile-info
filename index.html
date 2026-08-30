@@ -3,166 +3,55 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="마비노기 모바일 도적 공략과 연구 자료 모음">
-<title>도적방 정보 공유</title>
+<meta name="description" content="마비노기 모바일 업데이트와 도구 모음">
+<title>마비노기 모바일 정보</title>
 <style>
-  :root { --ink:#20242a; --muted:#707987; --paper:#f3f4f7; --line:#e0e3e9; --card:#fff; --accent:#7c5cff; --accent-soft:#eeeaff; --shadow:0 12px 30px rgba(37,42,52,.07); }
+  :root { --ink:#20242a; --muted:#727b85; --paper:#f5f6f8; --line:#e1e4e8; --card:#fff; }
   * { box-sizing:border-box; }
-  html { scroll-behavior:smooth; }
-  body { margin:0; min-height:100vh; background:radial-gradient(circle at 15% -5%,#e7e1ff 0,transparent 25rem),var(--paper); color:var(--ink); font-family:Arial,"Malgun Gothic","Noto Sans KR",sans-serif; }
-  main { max-width:800px; min-height:100vh; margin:0 auto; padding:42px 20px 60px; display:flex; flex-direction:column; justify-content:flex-start; }
-  .intro { position:relative; overflow:hidden; margin:0 0 18px; padding:28px 30px; border:1px solid rgba(124,92,255,.18); border-radius:20px; background:linear-gradient(135deg,#27233a,#3d3269); color:#d8d2ee; box-shadow:0 18px 45px rgba(44,35,82,.16); letter-spacing:.02em; }
-  .intro::after { content:"◆"; position:absolute; right:24px; top:50%; color:rgba(255,255,255,.08); font-size:86px; line-height:1; transform:translateY(-50%) rotate(12deg); }
-  .intro strong { position:relative; z-index:1; display:block; color:#fff; font-size:24px; font-weight:800; letter-spacing:-.03em; }
-  .intro span { position:relative; z-index:1; display:block; margin-top:7px; font-size:13px; }
-  .search { position:sticky; top:12px; z-index:10; margin:0 0 26px; padding:8px; border:1px solid rgba(224,227,233,.85); border-radius:14px; background:rgba(243,244,247,.88); backdrop-filter:blur(12px); }
-  .search::before { content:"⌕"; position:absolute; left:23px; top:50%; color:#8b849e; font-size:20px; transform:translateY(-52%); pointer-events:none; }
-  .search input { width:100%; padding:14px 16px 14px 43px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink); font:inherit; font-size:14px; outline:none; box-shadow:0 4px 14px rgba(37,42,52,.04); }
-  .search input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(124,92,255,.11); }
-  .sections { display:grid; gap:20px; }
-  .section { --section-accent:#7c5cff; padding:25px; border:1px solid var(--line); border-radius:18px; background:rgba(255,255,255,.72); box-shadow:var(--shadow); }
-  .section:nth-child(2) { --section-accent:#df6c8b; }
-  .section:nth-child(3) { --section-accent:#238f8d; }
-  .section:nth-child(4) { --section-accent:#d18a32; }
-  h2 { margin:0 0 7px; color:var(--section-accent); font-size:11px; letter-spacing:.14em; }
-  .label { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 18px; color:var(--muted); font-size:13px; }
-  .category-name { color:var(--ink); font-size:17px; font-weight:800; letter-spacing:-.025em; }
-  .count { flex:0 0 auto; padding:4px 9px; border-radius:999px; background:color-mix(in srgb,var(--section-accent) 10%,white); color:var(--section-accent); font-size:11px; font-weight:700; }
+  body { margin:0; min-height:100vh; background:var(--paper); color:var(--ink); font-family:Arial,"Malgun Gothic","Noto Sans KR",sans-serif; }
+  main { max-width:760px; min-height:100vh; margin:0 auto; padding:48px 20px 56px; display:flex; flex-direction:column; justify-content:center; }
+  .intro { margin:0 0 34px; color:var(--muted); letter-spacing:.02em; }
+  .intro strong { display:block; color:var(--ink); font-size:18px; font-weight:700; }
+  .intro span { display:block; margin-top:5px; font-size:13px; }
+  .sections { border-top:1px solid var(--line); }
+  .section { padding:25px 0 26px; border-bottom:1px solid var(--line); }
+  h2 { margin:0 0 6px; font-size:13px; letter-spacing:.12em; }
+  .label { margin:0 0 16px; color:var(--muted); font-size:13px; }
   .links { display:grid; gap:8px; }
-  a { display:grid; grid-template-columns:30px minmax(0,1fr) 20px; align-items:start; gap:11px; padding:14px 15px; border:1px solid var(--line); border-radius:11px; background:var(--card); color:inherit; text-decoration:none; transition:border-color .16s, transform .16s, box-shadow .16s; }
-  a:hover, a:focus-visible { border-color:color-mix(in srgb,var(--section-accent) 48%,var(--line)); transform:translateY(-2px); box-shadow:0 8px 20px rgba(37,42,52,.08); outline:none; }
-  .number { padding-top:2px; color:var(--section-accent); font-size:10px; font-weight:800; letter-spacing:.05em; }
-  .name { min-width:0; font-size:15px; font-weight:700; overflow-wrap:anywhere; }
-  .arrow { color:#a2a8b1; font-size:16px; line-height:1.2; transition:color .16s,transform .16s; }
-  a:hover .arrow { color:var(--section-accent); transform:translate(1px,-1px); }
-  .empty { display:none; padding:32px 0; color:var(--muted); text-align:center; font-size:13px; }
-  footer { margin-top:28px; padding-top:18px; border-top:1px solid var(--line); color:#9299a1; font-size:11px; text-align:center; }
-  [hidden] { display:none !important; }
-  @media (max-width:560px) { main { padding:24px 13px 44px; } .intro { padding:24px 22px; border-radius:16px; } .section { padding:20px 14px; border-radius:15px; } a { grid-template-columns:26px minmax(0,1fr) 18px; padding:13px 12px; } }
-  @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } a { transition:none; } }
+  a { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 15px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:inherit; text-decoration:none; transition:border-color .15s, transform .15s; }
+  a:hover, a:focus-visible { border-color:#8b949e; transform:translateY(-1px); outline:none; }
+  .name { font-size:15px; font-weight:700; }
+  .arrow { color:var(--muted); font-size:18px; line-height:1; }
+  footer { margin-top:26px; color:#9299a1; font-size:11px; }
+  @media (max-width:560px) { main { padding:36px 16px; } }
 </style>
 </head>
 <body>
 <main>
-  <p class="intro"><strong>도적방 정보 공유</strong><span>도적 공략 / 연구 자료 아카이브 · 총 73개</span></p>
-  <div class="search"><input id="search" type="search" placeholder="제목으로 자료 검색" aria-label="자료 검색" autocomplete="off"></div>
-  <div id="empty" class="empty">검색 결과가 없습니다.</div>
+  <p class="intro"><strong>마비노기 모바일 정보</strong><span>네네플/던컨</span></p>
+
   <div class="sections">
-    <section class="section" aria-labelledby="category-1">
-      <h2 id="category-1">ROGUE ARCHIVE 01</h2>
-      <p class="label"><span class="category-name">도적 공략 모음집</span><span class="count">21개</span></p>
+    <section class="section" aria-labelledby="update-title">
+      <h2 id="update-title">UPDATE</h2>
+      <p class="label">업데이트 / 패치노트</p>
       <div class="links">
-        <a href="https://rogue-van-9a7.notion.site/392a6999564f805c9266e88f11d65f78?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[실험글] 마도저항과 데미지간의 상관관계"><span class="number">01</span><span class="name">[실험글] 마도저항과 데미지간의 상관관계</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-v20260712-39ba6999564f80f09399d9ea7d43de2d?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌 2 초반] 도적 종합 공략v20260712"><span class="number">02</span><span class="name">[시즌 2 초반] 도적 종합 공략v20260712</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/390a6999564f80459600cdc32303314a?pvs=25" target="_blank" rel="noopener noreferrer" data-title="짱쌘 도적님들 소개"><span class="number">03</span><span class="name">짱쌘 도적님들 소개</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-38ca6999564f801894bcfc69a62487d9?pvs=25" target="_blank" rel="noopener noreferrer" data-title="시즌2 도적 기초 가이드[작성중]"><span class="number">04</span><span class="name">시즌2 도적 기초 가이드[작성중]</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-338a6999564f8051b230f1349f4d27f1?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌2] 평타 캔슬 가이드[억지로는 하지말자]"><span class="number">05</span><span class="name">[시즌2] 평타 캔슬 가이드[억지로는 하지말자]</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-399a6999564f80cb98c4dcbf29f64c99?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌2] 도적 사이클 모음집"><span class="number">06</span><span class="name">[시즌2] 도적 사이클 모음집</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-38ca6999564f802c8a5cfa3af2cee035?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌2] 도적 스탯 투자 이론 분석 보고서"><span class="number">07</span><span class="name">[시즌2] 도적 스탯 투자 이론 분석 보고서</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-39aa6999564f8019bc3ad285ba9de333?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌2] 도적 룬 추천 정리"><span class="number">08</span><span class="name">[시즌2] 도적 룬 추천 정리</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-3cca6999564f8058bd0dd30ae9577e64?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[지옥2]도적 어비스룬 추천"><span class="number">09</span><span class="name">[지옥2]도적 어비스룬 추천</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/399a6999564f8054957bf91459286937?pvs=25" target="_blank" rel="noopener noreferrer" data-title="도적 추천 아티펙트"><span class="number">10</span><span class="name">도적 추천 아티펙트</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2e9a6999564f80c59584f48ff433f050?pvs=25" target="_blank" rel="noopener noreferrer" data-title="독의 매커니즘"><span class="number">11</span><span class="name">독의 매커니즘</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/100-34ea6999564f80f28c54f0ad4a19234b?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[100랩까지]도적 래밸업 카드 가이드"><span class="number">12</span><span class="name">[100랩까지]도적 래밸업 카드 가이드</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/1-361a6999564f808c971ddc26c832490b?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌1이지만 괜찮]래밸업 카드에 따른 대미지 비교"><span class="number">13</span><span class="name">[시즌1이지만 괜찮]래밸업 카드에 따른 대미지 비교</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://discord.gg/G3w3wRWRc" target="_blank" rel="noopener noreferrer" data-title="독 시뮬레이션"><span class="number">14</span><span class="name">독 시뮬레이션</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/DPS-2eaa6999564f80aaa8bddd327c828812?pvs=25" target="_blank" rel="noopener noreferrer" data-title="개인 dps별 보석 효율 계산기"><span class="number">15</span><span class="name">개인 DPS별 보석 효율 계산기</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/354a6999564f8091a0edcaaa54e4d0d8?pvs=25" target="_blank" rel="noopener noreferrer" data-title="노란 헬리오도르는 도적에게 얼마나 좋을까?"><span class="number">16</span><span class="name">노란 헬리오도르는 도적에게 얼마나 좋을까?</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/1-34ba6999564f807ab5e0c1bfd12a4aaa?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌1]방연이,방강이,방연소 독폭발 테스트"><span class="number">17</span><span class="name">[시즌1]방연이,방강이,방연소 독폭발 테스트</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/35ba6999564f801bbc17fa788f74463a?pvs=25" target="_blank" rel="noopener noreferrer" data-title="포이즌 트랩 사용법"><span class="number">18</span><span class="name">포이즌 트랩 사용법</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/356a6999564f80ba99e3c8fbc016cc95?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[소개]최적스텟 배율 계산기 쿠짱봇"><span class="number">19</span><span class="name">[소개]최적스텟 배율 계산기 쿠짱봇</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/3a4a6999564f8019ac4df9b4084e91c4?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[문의사항]도적 개선 사항 정리"><span class="number">20</span><span class="name">[문의사항]도적 개선 사항 정리</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/3b0a6999564f808b9bede84e7f6da4ba?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[문의사항]어비스 개선안"><span class="number">21</span><span class="name">[문의사항]어비스 개선안</span><span class="arrow" aria-hidden="true">↗</span></a>
+        <a href="update/update_260827.html"><span class="name">8월 27일 업데이트 한눈에 보기</span><span class="arrow" aria-hidden="true">→</span></a>
+        <a href="update/update_260821.html"><span class="name">8월 21일 업데이트 한눈에 보기</span><span class="arrow" aria-hidden="true">→</span></a>
       </div>
     </section>
 
-    <section class="section" aria-labelledby="category-2">
-      <h2 id="category-2">ROGUE ARCHIVE 02</h2>
-      <p class="label"><span class="category-name">시즌2 신규 연구 자료 모음집</span><span class="count">18개</span></p>
+    <section class="section" aria-labelledby="tools-title">
+      <h2 id="tools-title">TOOLS</h2>
+      <p class="label">계산기 / 각종 도구</p>
       <div class="links">
-        <a href="https://rogue-van-9a7.notion.site/389a6999564f805faff6fcd8f1468c57?pvs=25" target="_blank" rel="noopener noreferrer" data-title="신규 장신구 룬 ‘덫’에 관한 이야기"><span class="number">01</span><span class="name">신규 장신구 룬 ‘덫’에 관한 이야기</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/38ca6999564f80c08762e65234f9ec4e?pvs=25" target="_blank" rel="noopener noreferrer" data-title="팬텀블레이드는 무슨 판정인가???"><span class="number">02</span><span class="name">팬텀블레이드는 무슨 판정인가???</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/38da6999564f80519325f807314f60a8?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[덫]평타 캔슬에 따른 차이 비교 실험"><span class="number">03</span><span class="name">[덫]평타 캔슬에 따른 차이 비교 실험</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/5-2-38da6999564f8004bcbac1028bd39168?pvs=25" target="_blank" rel="noopener noreferrer" data-title="5→2으로 은신타격을 광역으로 쓰자"><span class="number">04</span><span class="name">5→2으로 은신타격을 광역으로 쓰자</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/3b6a6999564f80d483cdeb2f84da0691?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[독빌드]독무를 활용한 독모으기 [부제 : 브익타이밍에 아득쓰기]"><span class="number">05</span><span class="name">[독빌드]독무를 활용한 독모으기 [부제 : 브익타이밍에 아득쓰기]</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/3b6a6999564f805e889edf0d5dacbaae?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[독빌드] 독성+평타로 독모으고, [부제 : 원하는 브익타이밍에 밤축+독펑 쓰기]"><span class="number">06</span><span class="name">[독빌드] 독성+평타로 독모으고, [부제 : 원하는 브익타이밍에 밤축+독펑 쓰기]</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-38da6999564f807a84c1ce1792639381?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌2룬]뼈 인장 룬에 대한 이야기"><span class="number">07</span><span class="name">[시즌2룬]뼈 인장 룬에 대한 이야기</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-3a4a6999564f80da893ccadfe64751e9?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌2룬]오염,침식+영밤의 가동율표"><span class="number">08</span><span class="name">[시즌2룬]오염,침식+영밤의 가동율표</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-397a6999564f80a09311dd24a625c32f?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌2룬] 신화 룬 ‘여신’ 아티펙트 추천 조합"><span class="number">09</span><span class="name">[시즌2룬] 신화 룬 ‘여신’ 아티펙트 추천 조합</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/3a1a6999564f800c9defdc8a2a49e6fd?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[작성 및 검토]도적 스킬&amp;평타 프레임 비교 실험"><span class="number">10</span><span class="name">[작성 및 검토]도적 스킬&amp;평타 프레임 비교 실험</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-3a3a6999564f804880dbc2bcbced77bf?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌2룬] 룬셋팅 비교 자료"><span class="number">11</span><span class="name">[시즌2룬] 룬셋팅 비교 자료</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/3a5a6999564f80a6ad1de0a7af5a3959?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[작성중] 궁도적 빌드 정리"><span class="number">12</span><span class="name">[작성중] 궁도적 빌드 정리</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/1-38ea6999564f8041b967eea9ce3cb6b8?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[버그 픽스 완료]1스 폭탄 공속,스속 영향을 안받는다."><span class="number">13</span><span class="name">[버그 픽스 완료]1스 폭탄 공속,스속 영향을 안받는다.</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/3c7a6999564f80f2ab65ee92244931d1?pvs=25" target="_blank" rel="noopener noreferrer" data-title="공격속도로 챙겨가는 평타 추가타 실험"><span class="number">14</span><span class="name">공격속도로 챙겨가는 평타 추가타 실험</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/8-27-3c9a6999564f803fbe66caf98d9144b3?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[8.27패치]평캔 유무 차이"><span class="number">15</span><span class="name">[8.27패치]평캔 유무 차이</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/8-27-3c9a6999564f808aabdbf7f93f2de82f?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[8.27]패치 이후 변화에 대한 정리"><span class="number">16</span><span class="name">[8.27]패치 이후 변화에 대한 정리</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/3cba6999564f8045bd11c48aebf1a262?pvs=25" target="_blank" rel="noopener noreferrer" data-title="열의 확인 테스트"><span class="number">17</span><span class="name">열의 확인 테스트</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/4-3cba6999564f8015b7a1daf4c2f0a05e?pvs=25" target="_blank" rel="noopener noreferrer" data-title="계승자는 4스텍일때 핵심스킬을 눌러야한다."><span class="number">18</span><span class="name">계승자는 4스텍일때 핵심스킬을 눌러야한다.</span><span class="arrow" aria-hidden="true">↗</span></a>
-      </div>
-    </section>
-
-    <section class="section" aria-labelledby="category-3">
-      <h2 id="category-3">ROGUE ARCHIVE 03</h2>
-      <p class="label"><span class="category-name">도적 연구 자료 모음집</span><span class="count">13개</span></p>
-      <div class="links">
-        <a href="https://rogue-van-9a7.notion.site/2faa6999564f80ac8e19cacd12ea24a2?pvs=25" target="_blank" rel="noopener noreferrer" data-title="강타 연타 스텟 분배에 대한 고찰"><span class="number">01</span><span class="name">강타 연타 스텟 분배에 대한 고찰</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2f9a6999564f808c8a99cb2263400158?pvs=25" target="_blank" rel="noopener noreferrer" data-title="도번방의 추가타 정리"><span class="number">02</span><span class="name">도번방의 추가타 정리</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/3c0a6999564f80bcb061c41b1431a429?pvs=25" target="_blank" rel="noopener noreferrer" data-title="공속으로 인한 스킬뎀증은 피증? 최종뎀?"><span class="number">03</span><span class="name">공속으로 인한 스킬뎀증은 피증? 최종뎀?</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/336a6999564f80beb91ed79ad1a054e7?pvs=25" target="_blank" rel="noopener noreferrer" data-title="도적 추천 전설 펫 스킬 가동율 영상"><span class="number">04</span><span class="name">도적 추천 전설 펫 스킬 가동율 영상</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/353a6999564f80eba5aff4b7fdc67cb4?pvs=25" target="_blank" rel="noopener noreferrer" data-title="독 폭발 : 평타 독 기여도 실험"><span class="number">05</span><span class="name">독 폭발 : 평타 독 기여도 실험</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2eda6999564f8067a4daca6527d3c862?pvs=25" target="_blank" rel="noopener noreferrer" data-title="독성 룬에 대하여"><span class="number">06</span><span class="name">독성 룬에 대하여</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/1-3-331a6999564f8043a783c622d4ec706f?pvs=25" target="_blank" rel="noopener noreferrer" data-title="독모으기 독성 1차징? 3차징? 선택가이드"><span class="number">07</span><span class="name">독모으기 독성 1차징? 3차징? 선택가이드</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/31ba6999564f80fb905acdf925dc247a?pvs=25" target="_blank" rel="noopener noreferrer" data-title="포이즌 트랩에 대한 여러가지 실험"><span class="number">08</span><span class="name">포이즌 트랩에 대한 여러가지 실험</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/31ba6999564f80cfb052dfd63817e6e4?pvs=25" target="_blank" rel="noopener noreferrer" data-title="아티펙트 ‘원소’ 속성피해 이야기"><span class="number">09</span><span class="name">아티펙트 ‘원소’ 속성피해 이야기</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/vs-2fba6999564f8053ab12c2c445c5d5f5?pvs=25" target="_blank" rel="noopener noreferrer" data-title="심심풀이 시추 vs 너구리"><span class="number">10</span><span class="name">심심풀이 시추 vs 너구리</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/33fa6999564f809ca198db8f08922f37?pvs=25" target="_blank" rel="noopener noreferrer" data-title="다양한 스킬작 에픽펫 모음집"><span class="number">11</span><span class="name">다양한 스킬작 에픽펫 모음집</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/32aa6999564f8042a19afdfccc4fd1a2?pvs=25" target="_blank" rel="noopener noreferrer" data-title="브레이크 스텟 효율 간단 실험"><span class="number">12</span><span class="name">브레이크 스텟 효율 간단 실험</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/32aa6999564f80d1939fc0471147a22d?pvs=25" target="_blank" rel="noopener noreferrer" data-title="주입 사용 시 평타 사용에 관해"><span class="number">13</span><span class="name">주입 사용 시 평타 사용에 관해</span><span class="arrow" aria-hidden="true">↗</span></a>
-      </div>
-    </section>
-
-    <section class="section" aria-labelledby="category-4">
-      <h2 id="category-4">ROGUE ARCHIVE 04</h2>
-      <p class="label"><span class="category-name">시즌 1 과거 자료 모음집</span><span class="count">21개</span></p>
-      <div class="links">
-        <a href="https://rogue-van-9a7.notion.site/38ca6999564f80be843afe162eb1e2c2?pvs=25" target="_blank" rel="noopener noreferrer" data-title="침식룬 관련 정보[펌]"><span class="number">01</span><span class="name">침식룬 관련 정보[펌]</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/3b0a6999564f80dfb97bce991aafe3b9?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[룬테스트]이제와서 보는 영원룬"><span class="number">02</span><span class="name">[룬테스트]이제와서 보는 영원룬</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/38ca6999564f803280abf29284b0617a?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[룬테스트]침묵의 각인 사용 테스트"><span class="number">03</span><span class="name">[룬테스트]침묵의 각인 사용 테스트</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/vs-394a6999564f8061892cf95027e264bb?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[룬테스트] 암운vs두갈래"><span class="number">04</span><span class="name">[룬테스트] 암운vs두갈래</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-38da6999564f80e8bfeec43b6ed8e2e4?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌2룬] 주의 적 처치 버프 특이사항"><span class="number">05</span><span class="name">[시즌2룬] 주의 적 처치 버프 특이사항</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-38ea6999564f80ae83fee2d61d7dc4ce?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌2룬]백금천칭 버프"><span class="number">06</span><span class="name">[시즌2룬]백금천칭 버프</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-38da6999564f8057b8b0cfa24721919e?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌2 룬]침식은 아이템을 빼도 유지된다."><span class="number">07</span><span class="name">[시즌2 룬]침식은 아이템을 빼도 유지된다.</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-2-3a7a6999564f80b7a5afef850f9d5c29?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌2룬]용룬2개 버프가동확인"><span class="number">08</span><span class="name">[시즌2룬]용룬2개 버프가동확인</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/38ea6999564f80b89081dd34f9a4dd8b?pvs=25" target="_blank" rel="noopener noreferrer" data-title="해결사+열의 실험"><span class="number">09</span><span class="name">해결사+열의 실험</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/30-38ba6999564f80d9b25fd606320bce0a?pvs=25" target="_blank" rel="noopener noreferrer" data-title="바위칼날 무기룬 30스텍 풀유지"><span class="number">10</span><span class="name">바위칼날 무기룬 30스텍 풀유지</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/39ba6999564f80baa354f27d1814a448?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[퍼옴자료] 여러직업 셋팅 자료"><span class="number">11</span><span class="name">[퍼옴자료] 여러직업 셋팅 자료</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-38ba6999564f80f0a83dd39404e9d376?pvs=25" target="_blank" rel="noopener noreferrer" data-title="시즌2 신규 황금 채집물 추가"><span class="number">12</span><span class="name">시즌2 신규 황금 채집물 추가</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/38ca6999564f807a8982e4f529701286?pvs=25" target="_blank" rel="noopener noreferrer" data-title="마도저항 장비 획득 가이드"><span class="number">13</span><span class="name">마도저항 장비 획득 가이드</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-38ea6999564f8042aec6e227d01af5f2?pvs=25" target="_blank" rel="noopener noreferrer" data-title="시즌2 룬 정리"><span class="number">14</span><span class="name">시즌2 룬 정리</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/38fa6999564f801a9532e2488a72939f?pvs=25" target="_blank" rel="noopener noreferrer" data-title="소울스트림 내용"><span class="number">15</span><span class="name">소울스트림 내용</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-3c1a6999564f80dfbd6bd4c34951e888?pvs=25" target="_blank" rel="noopener noreferrer" data-title="시즌2 룬 셋팅 테스트"><span class="number">16</span><span class="name">시즌2 룬 셋팅 테스트</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-38fa6999564f80b7a90ad1bb73543208?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌2룬] 셋팅 간단비교 데이터"><span class="number">17</span><span class="name">[시즌2룬] 셋팅 간단비교 데이터</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/123-134-391a6999564f808499e3d324e086079e?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[기록]123 덫땅폭, 134 덫땅폭 간단 비교"><span class="number">18</span><span class="name">[기록]123 덫땅폭, 134 덫땅폭 간단 비교</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/123-134-389a6999564f8071bfa8dccbba75da35?pvs=25" target="_blank" rel="noopener noreferrer" data-title="123 덫땅교, 134 덫땅폭 간단 실험 데이터"><span class="number">19</span><span class="name">123 덫땅교, 134 덫땅폭 간단 실험 데이터</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/2-2-15-39ea6999564f80f1a186f7f59d4f57b3?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[시즌2룬 간단비교]덫주폭, 독성주폭 2분딜 15초딜 비교"><span class="number">20</span><span class="name">[시즌2룬 간단비교]덫주폭, 독성주폭 2분딜 15초딜 비교</span><span class="arrow" aria-hidden="true">↗</span></a>
-        <a href="https://rogue-van-9a7.notion.site/3a5a6999564f80548af1caef8c913c62?pvs=25" target="_blank" rel="noopener noreferrer" data-title="[펌]다른직업 셋팅가이드"><span class="number">21</span><span class="name">[펌]다른직업 셋팅가이드</span><span class="arrow" aria-hidden="true">↗</span></a>
+        <a href="tools/critical_calculator.html"><span class="name">치명 / 추가타 확률 계산기</span><span class="arrow" aria-hidden="true">→</span></a>
+        <a href="tools/jewelry_calculator.html"><span class="name">보석 계산기</span><span class="arrow" aria-hidden="true">→</span></a>
+        <a href="tools/damage-multiplier-calculator.html"><span class="name">강타 / 연타 / 치명타 배율 계산기</span><span class="arrow" aria-hidden="true">→</span></a>
       </div>
     </section>
   </div>
+
   <footer>마비노기 모바일 정보 사이트</footer>
 </main>
-<script>
-  const search = document.querySelector('#search');
-  const links = [...document.querySelectorAll('.links a')];
-  const sections = [...document.querySelectorAll('.section')];
-  const empty = document.querySelector('#empty');
-  search.addEventListener('input', () => {
-    const query = search.value.trim().toLocaleLowerCase('ko');
-    let visible = 0;
-    links.forEach(link => { const show = !query || link.dataset.title.includes(query); link.hidden = !show; if (show) visible++; });
-    sections.forEach(section => { section.hidden = ![...section.querySelectorAll('.links a')].some(link => !link.hidden); });
-    empty.style.display = visible ? 'none' : 'block';
-  });
-</script>
 </body>
 </html>
