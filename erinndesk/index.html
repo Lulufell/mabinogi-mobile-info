@@ -8,8 +8,8 @@
 <dialog id="historyDialog" class="wide-dialog"><div class="section-heading"><div><p class="eyebrow">SESSION LOG</p><h2>요청 기록</h2></div><button id="closeHistory">닫기</button></div><p class="muted">이번 앱 실행 중의 기록입니다. 앱을 종료하면 사라집니다.</p><div id="historyList"></div></dialog><div id="toast" role="status" hidden></div>
 <dialog id="bridgeDialog"><form id="bridgeForm"><p class="eyebrow">LOCAL CONNECTION</p><h2>내 PC의 게임과 연결</h2>
 <p>1. <a href="./downloads/ErinnBridge.exe" download><u>로컬 서버 다운로드</u></a> 후 실행하세요.</p>
-<p>2. 서버 창에 이 사이트 주소를 입력하고 허용하세요.</p><pre id="bridgeOrigin"></pre>
-<p>3. 서버 창의 포트와 연결 키를 입력하세요. 브라우저가 로컬 네트워크 접근을 물으면 허용해 주세요.</p>
+<p>2. 서버가 웹페이지를 자동으로 열고 연결합니다. 이미 실행 중이면 서버 창의 웹페이지 열기 / 다시 연결을 누르세요.</p><pre id="bridgeOrigin"></pre>
+<p>자동 연결이 안 될 때만 아래에 포트와 연결 키를 입력하세요. 브라우저가 로컬 네트워크 접근을 물으면 허용해 주세요.</p>
 <label>포트<input id="bridgePort" type="number" min="1" max="65535" value="18765" required></label>
 <label>연결 키<input id="bridgeKey" type="password" autocomplete="off" required></label>
 <p class="hint">연결 키는 이 페이지 메모리에서만 사용합니다. 새로고침 또는 서버 재시작 후 다시 연결하세요. 게임에서 AI 커넥터를 켜 두세요.</p>

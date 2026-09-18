@@ -1,5 +1,8 @@
 'use strict';
 window.bridgeSettings={base:'',token:''};
+const launchParams=new URLSearchParams(location.hash.slice(1));
+const launchPort=launchParams.get('bridge_port'), launchKey=launchParams.get('bridge_key');
+if(launchPort||launchKey)history.replaceState(null,'',location.pathname+location.search+'#home');
 window.bridgeFetch=async function(path,body){
  const {base,token}=window.bridgeSettings;
  if(!base||!token)throw new Error('먼저 로컬 서버를 연결하세요.');
@@ -27,4 +30,9 @@ document.addEventListener('DOMContentLoaded',()=>{
   finally{button.disabled=false;}
  };
  dialog.showModal();
+ if(launchPort&&launchKey){
+  document.querySelector('#bridgePort').value=launchPort;
+  document.querySelector('#bridgeKey').value=launchKey;
+  document.querySelector('#bridgeForm').requestSubmit();
+ }
 });
