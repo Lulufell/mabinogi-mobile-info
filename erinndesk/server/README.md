@@ -22,7 +22,7 @@ git push origin main
 ```
 
 토큰은 코드/문서/채팅에 넣지 않고 GitHub Secret 입력창에만 입력합니다.
-Discord Bot Token은 서버 배포에 필요하지 않습니다. Discord 공개 키와 앱/서버 ID는 비밀 인증정보가 아닙니다.
+서버 배포 후 명령 자동 등록을 위해 `DISCORD_BOT_TOKEN`도 같은 환경의 Secret에 등록합니다. Discord 공개 키와 앱/서버 ID는 비밀 인증정보가 아닙니다.
 현재 저장소의 공개/비공개 설정은 변경하지 않았습니다. push하면 이 서버 코드도 기존 저장소의 공개 범위를 따릅니다.
 
 ## 자동 실행
@@ -32,7 +32,7 @@ Discord Bot Token은 서버 배포에 필요하지 않습니다. Discord 공개 
 - 그 외 브랜치에서 수동 실행하면 검증만 수행.
 - 동일 브랜치 실행은 동시에 배포하지 않음. GitHub concurrency 특성상 대기 중인 실행은 더 최신 실행으로 대체될 수 있음.
 - 배포 완료 후 /health의 commit이 GitHub 커밋과 같은지 확인. 실패는 Actions에 표시하며 자동 롤백하지 않음.
-- Discord 명령 등록 및 앱 EXE 빌드는 별도 작업.
+- 서버 상태 확인 성공 후 DISCORD_BOT_TOKEN으로 Discord 명령 목록을 자동 등록합니다. 실패 시 Actions 실패로 표시하며 이미 배포한 서버는 유지합니다. 앱 EXE 빌드는 별도 작업.
 
 ## 수동 명령
 Node.js 24, pnpm 11.25.0을 기준으로 합니다. lockfile을 고정 설치합니다.
@@ -74,3 +74,9 @@ python manage.py register
 ```
 
 27개 테스트 및 배포 dry-run 통과. 이 변경 작업에서 커밋/push/운영 서버 배포/Discord 명령 등록은 수행하지 않았습니다.
+
+
+## 명령 자동 등록 (2026-10-13)
+`erinn-production` 환경 Secrets에 `DISCORD_BOT_TOKEN`을 추가하면 이후 main push/수동 워크플로 실행에서 서버 확인 후 명령이 자동 갱신됩니다. 위 /테스트의 수동 등록 안내는 선택 사항이며 더 이상 필수가 아닙니다.
+manage.py의 COMMANDS가 해당 전용 서버의 전체 명령 목록입니다. 목록에서 제거한 명령은 등록 시 Discord에서도 삭제됩니다.
+PR 테스트에는 봇 토큰을 전달하지 않습니다. CI에서 토큰이 없으면 입력 대기 없이 실패합니다. 로컬 실행은 기존 숨김 입력을 지원합니다. 모의 HTTP 테스트 4개 통과(실제 봇 호출 없음).

@@ -1,5 +1,5 @@
 """Developer setup only. Bot token is read secretly and never saved."""
-import getpass,json,re,sys
+import getpass,json,re,sys,os
 from pathlib import Path
 from urllib.request import Request,urlopen
 from urllib.error import HTTPError
@@ -38,7 +38,9 @@ def registration_error(exc,token):
   snippet=re.sub(r'<[^>]*>',' ',snippet)
   snippet=' '.join(snippet.split())[:600]
   if snippet:details.append('응답 내용: '+snippet)
- text='\n'.join(details)[:4000]
+ text='\n'.join(details)
+ if token:text=text.replace(token,'[숨김]')
+ text=text[:4000]
  if token:text=text.replace(token,'[숨김]')
  text=''.join(c for c in text if c in '\n\t' or ord(c)>=32)
  return f'명령 등록 실패 (HTTP {exc.code}).'+ ('\n'+text if text else '\nDiscord에서 상세 오류를 받지 못했습니다.')
@@ -61,10 +63,18 @@ def configure():
  (ROOT/'wrangler.jsonc').write_text(json.dumps(config,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
  print('설정 저장 완료. 다음으로 Cloudflare 로그인과 배포를 진행하세요.')
 
+def registration_token():
+ token=os.environ.get('DISCORD_BOT_TOKEN','').strip()
+ if not token:
+  if os.environ.get('CI') or not sys.stdin.isatty():
+   raise ValueError('DISCORD_BOT_TOKEN Secret이 없습니다. GitHub erinn-production 환경에 등록하세요.')
+  token=getpass.getpass('디스코드 Bot Token (화면에 표시·파일 저장하지 않음): ').strip()
+ return token
+
 def register():
  config=json.loads((ROOT/'wrangler.jsonc').read_text(encoding='utf-8'))['vars']
  if not config['DISCORD_APPLICATION_ID'].isdigit() or not config['DISCORD_GUILD_ID'].isdigit():raise ValueError('먼저 configure를 실행하세요.')
- token=getpass.getpass('디스코드 Bot Token (화면에 표시·파일 저장하지 않음): ').strip()
+ token=registration_token()
  if token.startswith('Bot '):token=token[4:].strip()
  if not token or not re.fullmatch(r'[A-Za-z0-9_.-]+',token):
   raise ValueError('토큰 입력에 공백·제어문자 또는 잘못된 문자가 있습니다. Bot 화면에서 토큰을 다시 복사하고 터미널의 우클릭 또는 Ctrl+Shift+V로 붙여넣으세요. 토큰은 채팅에 보내지 마세요.')

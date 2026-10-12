@@ -28,6 +28,10 @@ jobs:
           version: '11.25.0'
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m unittest discover -s test -p 'test_*.py'
       - run: pnpm run check:deploy
         env:
           WRANGLER_SEND_METRICS: 'false'
@@ -65,6 +69,14 @@ jobs:
           WRANGLER_SEND_METRICS: 'false'
       - name: Verify deployed commit
         run: node scripts/check-health.mjs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Register Discord commands
+        run: python manage.py register
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          PYTHONUTF8: '1'
       - name: Record deployment
         run: |
           echo "Deployed commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
