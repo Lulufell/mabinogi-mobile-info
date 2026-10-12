@@ -1,0 +1,71 @@
+name: Erinn Desk server
+on:
+  push:
+    branches: [main]
+    paths: ['erinndesk/server/**', '.github/workflows/erinndesk-server.yml']
+  pull_request:
+    paths: ['erinndesk/server/**', '.github/workflows/erinndesk-server.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: erinn-server-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: erinndesk/server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.25.0'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm run check:deploy
+        env:
+          WRANGLER_SEND_METRICS: 'false'
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: erinn-production
+    defaults:
+      run:
+        working-directory: erinndesk/server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.25.0'
+      - run: pnpm install --frozen-lockfile
+      - name: Check deployment credentials
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'Missing CLOUDFLARE_API_TOKEN'; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo 'Missing CLOUDFLARE_ACCOUNT_ID'; exit 1; }
+      - name: Deploy
+        run: pnpm exec wrangler deploy --var "DEPLOY_COMMIT:$GITHUB_SHA"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+      - name: Verify deployed commit
+        run: node scripts/check-health.mjs
+      - name: Record deployment
+        run: |
+          echo "Deployed commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Service: https://erinn-desk-remote.lulufell.workers.dev' >> "$GITHUB_STEP_SUMMARY"
