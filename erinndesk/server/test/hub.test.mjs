@@ -394,3 +394,13 @@ test('legacy grace timestamp is optional, bounded and cannot silently be renewed
  f.policy={...f.policy,revision:3,legacyUntil:0};assert.equal((await f.publish()).status,200);
  assert.match(await f.hub.denied('discord',null,''),/새 버전/);
 });
+
+test('blacklist blocks linked commands and late results but allows unlink without leaking memo',async()=>{
+ const f=await operationsFixture();await f.publish();
+ await f.storage.put('agent:pc-a',{user:'user-a',version:'1.4.9'});await f.storage.put('user:user-a',{agent:'pc-a'});
+ const c=command('아이템',[{name:'이름',value:'가죽'}]);await f.hub.discord(c);
+ const state=await f.storage.get('ops:current');state.access={mode:'all',users:[],blockedUsers:[{id:'user-a',note:'PRIVATE NOTE',reason:'운영 정책 위반'}]};await f.storage.put('ops:current',state);
+ const blocked=await (await f.hub.discord(command('아이템',[{name:'이름',value:'가죽'}]))).json();assert.match(blocked.data.content,/사유 : 운영 정책 위반/);assert.doesNotMatch(blocked.data.content,/PRIVATE NOTE/);
+ let delivered=0;const oldFetch=globalThis.fetch;globalThis.fetch=async()=>{delivered++;return new Response('{}');};
+ try{await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'result',id:c.id,result:{ok:true,items:[]}}));await Promise.all(f.tasks);assert.equal(delivered,0);assert.match((await (await f.hub.discord(command('연결해제'))).json()).data.content,/해제했습니다/);await Promise.all(f.tasks);}finally{globalThis.fetch=oldFetch;}
+});

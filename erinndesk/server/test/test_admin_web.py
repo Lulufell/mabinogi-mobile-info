@@ -69,6 +69,17 @@ class WebTests(unittest.TestCase):
   self.download.assert_called_once_with(url,hashlib.sha256(data).hexdigest(),len(data))
   body=self.body();body['policy']['latest']='1.4.10';body['policy']['releases']['1.4.10']=release
   self.assertEqual(self.call('/api/prepare',body)[0],200);self.assertEqual(self.fixture.writes,[])
+ def test_url_change_revalidates_registered_hash_and_stages_without_changing_latest(self):
+  url='https://example.com/moved.exe'
+  status,_,raw=self.call('/api/release-url',{'version':'1.4.9','url':url});self.assertEqual(status,200)
+  self.download.assert_called_once_with(url,'a'*64,10)
+  body=self.body();body['policy']['releases']['1.4.9']=json.loads(raw)['release']
+  status,_,plan=self.call('/api/prepare',body);self.assertEqual(status,200);self.assertEqual(json.loads(plan)['after']['policy']['latest'],'1.4.9');self.assertEqual(self.fixture.writes,[])
+ def test_url_change_rejects_unknown_version_and_failed_verification(self):
+  self.assertEqual(self.call('/api/release-url',{'version':'1.4.10','url':'https://example.com/new.exe'})[0],400);self.download.assert_not_called()
+  self.download.side_effect=ValueError('게시된 파일이 다릅니다.')
+  self.assertEqual(self.call('/api/release-url',{'version':'1.4.9','url':'https://example.com/new.exe'})[0],400)
+  self.assertEqual(self.fixture.writes,[]);self.assertEqual(self.app.verified,set())
  def test_restore_is_previewed_and_preserves_newer_release_records(self):
   self.fixture.state['policy']['releases']['1.4.10']={'sha256':'b'*64,'size':20,'url':'https://example.com/b.exe'}
   status,_,raw=self.call('/api/restore',{'expectedRevision':1,'revision':1});self.assertEqual(status,200)
@@ -81,5 +92,15 @@ class WebTests(unittest.TestCase):
   body=self.body();body['access']['users']=[{'id':'123','note':''}];self.assertEqual(self.call('/api/prepare',body)[0],400)
   body['access']['users']=[{'id':'123456789012345678','note':''}]*2;self.assertEqual(self.call('/api/prepare',body)[0],400)
   self.assertEqual(self.call('/api/release?version=1.4.10&url=http://example.com/app',b'x',raw=True)[0],400);self.sign.assert_not_called()
+
+ def test_blacklist_prepare_commit_and_validation(self):
+  body=self.body();record={'id':'123456789012345678','note':'private note','reason':'public reason'}
+  body['access']['blockedUsers']=[record]
+  code,_,raw=self.call('/api/prepare',body);self.assertEqual(code,200)
+  plan=json.loads(raw);self.assertEqual(plan['after']['access']['blockedUsers'],[record])
+  self.assertEqual(self.call('/api/commit',{'ticket':plan['ticket']})[0],200)
+  self.assertEqual(self.fixture.writes[-1]['access']['blockedUsers'],[record])
+  for blocked in (None,[record,record],[{**record,'reason':'x'*301}],[{**record,'note':'x'*101}]):
+   body['access']['blockedUsers']=blocked;self.assertEqual(self.call('/api/prepare',body)[0],400)
 
 if __name__=='__main__':unittest.main()

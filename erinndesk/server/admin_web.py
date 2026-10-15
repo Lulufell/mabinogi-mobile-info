@@ -41,6 +41,12 @@ def validate(policy,access,now):
  for user in access['users']:
   if not isinstance(user,dict) or not isinstance(user.get('id'),str) or not re.fullmatch(r'\d{17,22}',user['id']) or user['id'] in seen or not isinstance(user.get('note'),str) or len(user['note'])>100:raise ValueError('사용자 ID는 중복 없이 입력하고 메모는 100자 이내로 작성하세요.')
   seen.add(user['id'])
+ blocked=access.get('blockedUsers',[])
+ if not isinstance(blocked,list) or len(blocked)>10000:raise ValueError('차단 사용자 목록을 확인하세요.')
+ seen=set()
+ for user in blocked:
+  if not isinstance(user,dict) or not isinstance(user.get('id'),str) or not re.fullmatch(r'\d{17,22}',user['id']) or user['id'] in seen or not isinstance(user.get('note'),str) or len(user['note'])>100 or not isinstance(user.get('reason'),str) or len(user['reason'])>300:raise ValueError('차단 사용자 ID는 중복 없이 입력하고 메모는 100자, 안내 사유는 300자 이내로 작성하세요.')
+  seen.add(user['id'])
 
 def download_matches(url,digest,size):
  class Redirect(HTTPRedirectHandler):
@@ -84,6 +90,11 @@ class Application:
   release={'sha256':digest,'size':size,'url':url}
   with self.lock:self.verified.add((version,digest,size,url))
   return {'version':version,'release':release}
+ def verify_url(self,version,url):
+  if not isinstance(version,str) or not VERSION.fullmatch(version):raise ValueError('버전 형식을 확인하세요.')
+  state=self.api('/admin/state');release=(state.get('policy') or {}).get('releases',{}).get(version)
+  if not release:raise ValueError('먼저 해당 버전의 배포 정보를 적용해주세요.')
+  return self.verify_release(version,url,release['sha256'],release['size'])
  def prepare(self,body,restore=False):
   state=self.api('/admin/state')
   if type(body.get('expectedRevision')) is not int or body['expectedRevision']!=state['revision']:raise ValueError('서버 설정이 변경되었습니다. 새로고침 후 다시 확인하세요.')
@@ -165,6 +176,7 @@ class Handler(BaseHTTPRequestHandler):
    if not 0<length<=262144 or self.headers.get('Content-Type','').split(';')[0]!='application/json':raise ValueError('설정 형식을 확인하세요.')
    body=json.loads(self.rfile.read(length))
    if not isinstance(body,dict):raise ValueError('설정 형식을 확인하세요.')
+   if path=='/api/release-url':return self.reply(200,self.server.app.verify_url(body.get('version'),body.get('url')))
    if path in ('/api/prepare','/api/restore'):return self.reply(200,self.server.app.prepare(body,path=='/api/restore'))
    if path=='/api/commit':return self.reply(200,self.server.app.commit(body.get('ticket')))
    self.reply(404,{'error':'지원하지 않는 작업입니다.'})

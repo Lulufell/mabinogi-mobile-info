@@ -28,6 +28,10 @@ export async function verifyEnvelope(envelope,publicKey){
 export function validateAccess(a){
  if(!a||!['all','allowlist','maintenance'].includes(a.mode)||!Array.isArray(a.users)||a.users.length>10000)throw Error('사용자 허용 설정을 확인하세요.');
  const seen=new Set();for(const u of a.users){if(!u||!/^\d{17,22}$/.test(u.id)||typeof u.note!=='string'||u.note.length>100||seen.has(u.id))throw Error('디스코드 ID와 메모를 확인하세요.');seen.add(u.id);}
+ if(a.blockedUsers!==undefined){
+  if(!Array.isArray(a.blockedUsers)||a.blockedUsers.length>10000)throw Error('차단 사용자 목록을 확인하세요.');
+  const blocked=new Set();for(const u of a.blockedUsers){if(!u||!/^\d{17,22}$/.test(u.id)||typeof u.note!=='string'||u.note.length>100||typeof u.reason!=='string'||u.reason.length>300||blocked.has(u.id))throw Error('차단 사용자 ID, 메모(100자), 안내 사유(300자)를 확인하세요.');blocked.add(u.id);}
+ }
  return a;
 }
 export function denial(policy,access,feature,user,clientVersion){
@@ -35,6 +39,8 @@ export function denial(policy,access,feature,user,clientVersion){
  if(policy.expiresAt<=Date.now())return '운영 설정의 유효기간이 만료되어 디스코드 연결을 일시 중단했습니다.';
  for(const name of ['discord',feature]){const f=policy.features[name];if(!f?.enabled)return f?.reason||'디스코드 기능을 점검하고 있습니다.';}
  if(access?.mode==='maintenance')return '디스코드 기능을 점검하고 있습니다.';
+ const blockedUser=user&&(access?.blockedUsers||[]).find(u=>u.id===user);
+ if(blockedUser)return '디스코드 기능 이용이 제한된 계정입니다.'+(blockedUser.reason.trim()?'\n사유 : '+blockedUser.reason.trim():'');
  if(user&&access?.mode==='allowlist'&&!access.users.some(u=>u.id===user))return '현재 허용된 사용자만 디스코드 기능을 이용할 수 있습니다.';
  const legacy=clientVersion===''&&Number.isSafeInteger(policy.legacyUntil)&&policy.legacyUntil>Date.now();
  if(clientVersion!==undefined&&!legacy&&(!version(clientVersion)||compare(clientVersion,policy.minimum)<0||policy.blocked.includes(clientVersion))){
