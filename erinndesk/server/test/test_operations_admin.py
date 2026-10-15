@@ -14,11 +14,20 @@ class AdminTests(unittest.TestCase):
   self.root=patch.object(ops,'ROOT',root);self.root.start();self.addCleanup(self.root.stop)
   self.directory=patch.object(ops,'ADMIN_DIR',root/'credentials');self.directory.start();self.addCleanup(self.directory.stop)
   self.quiet=contextlib.redirect_stdout(io.StringIO());self.quiet.__enter__();self.addCleanup(self.quiet.__exit__,None,None,None)
+  if sys.platform!='win32':
+   # Linux CI cannot call Windows DPAPI. Keep persistence/signature/backup tests
+   # active with an encrypted, ephemeral test store; production remains DPAPI-only.
+   from cryptography.fernet import Fernet
+   cipher=Fernet(Fernet.generate_key())
+   storage=patch.object(ops,'protect',side_effect=lambda data,decode=False: cipher.decrypt(data) if decode else cipher.encrypt(data))
+   storage.start();self.addCleanup(storage.stop)
   ops.initialize()
+ @unittest.skipUnless(sys.platform=='win32','Windows DPAPI integration is Windows-only')
  def test_secrets_are_encrypted_and_initialization_reuses_key(self):
   before=ops.credentials();cipher=(ops.ADMIN_DIR/'credentials.dat').read_bytes()
   self.assertNotIn(before['token'].encode(),cipher);self.assertNotIn(before['private'].encode(),cipher)
   ops.initialize();self.assertEqual(ops.credentials(),before)
+ def test_signature_matches_exported_public_key(self):
   public=json.loads((ops.ROOT/'operations-public.json').read_text())['publicKey'];e=ops.seal({'fixture':'한글'})
   Ed25519PublicKey.from_public_bytes(bytes.fromhex(public)).verify(base64.b64decode(e['signature']),e['payload'].encode())
  def test_encrypted_backup_restore_and_wrong_password(self):
