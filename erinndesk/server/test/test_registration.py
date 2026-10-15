@@ -18,7 +18,7 @@ class RegistrationTests(unittest.TestCase):
    manage.register()
    prompt.assert_not_called()
    self.assertEqual(calls[1].method,'PUT')
-   self.assertIn('테스트',[x['name'] for x in json.loads(calls[1].data)])
+   self.assertEqual({x['name'] for x in json.loads(calls[1].data)}, {'연결','아이템','연결상태','스크린샷','연결해제'})
    self.assertNotIn('fixture.secret',output.getvalue())
  def test_interactive_prompt_still_supported(self):
   with patch.dict(os.environ,{},clear=True),patch('manage.sys.stdin.isatty',return_value=True),patch('manage.getpass.getpass',return_value='local.secret'):

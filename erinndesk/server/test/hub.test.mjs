@@ -6,6 +6,7 @@ import { hash } from '../src/protocol.js';
 // Execute the actual Worker implementation with only the Cloudflare host object replaced.
 const code=(await fs.readFile(new URL('../src/worker.js',import.meta.url),'utf8'))
  .replace("import { DurableObject } from 'cloudflare:workers';",'class DurableObject {constructor(ctx,env){this.ctx=ctx;this.env=env;}}')
+ .replace("'./operations.js'",JSON.stringify(new URL('../src/operations.js',import.meta.url).href))
  .replace("'./protocol.js'",JSON.stringify(new URL('../src/protocol.js',import.meta.url).href));
 const {RemoteHub,default:Worker}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
 class Storage{
@@ -275,23 +276,121 @@ test('health never accesses registration storage even with a stale reset variabl
  assert.deepEqual(await response.json(),{ok:true,service:'Erinn Desk Remote',version:1,commit:'abc'});
 });
 
-test('deployment test works without a PC, is private, replay-safe and rate-limited',async()=>{
+test('removed commands never dispatch to a PC',async()=>{
  const {hub,storage,socket,other}=setup();
- hub.env.DEPLOY_COMMIT='a'.repeat(40);
- const request=command('테스트');
- const first=await (await hub.discord(request)).json();
- assert.equal(first.type,4);assert.equal(first.data.flags,64);
- assert(first.data.content.includes('aaaaaaaaaaaa'));
- assert(first.data.content.includes('정상 응답'));
- assert.deepEqual(await (await hub.discord(request)).json(),first);
+ await storage.put('user:user-a',{agent:socket.id});await storage.put('agent:'+socket.id,{user:'user-a'});
+ const result=await (await hub.discord(command('테스트'))).json();
+ assert(result.data.content.includes('지원하지 않는 명령'));assert.equal(result.data.flags,64);
  assert.equal(socket.messages.length,0);assert.equal(other.messages.length,0);
  assert.equal((await storage.list({prefix:'query:'})).size,0);
- for(let i=0;i<9;i++)await hub.discord(command('테스트'));
- assert((await (await hub.discord(command('테스트'))).json()).data.content.includes('1분에 최대 10번'));
 });
 
-test('deployment test labels manual deployments without exposing arbitrary environment text',async()=>{
- const {hub}=setup();hub.env.DEPLOY_COMMIT='not-a-commit';
- const result=await (await hub.discord(command('테스트'))).json();
- assert(result.data.content.includes('수동 배포'));assert(!result.data.content.includes('not-a-commit'));
+// Operations policy security: exercise real routing, signatures and existing links.
+async function operationsFixture(){
+ const f=setup(),keys=await crypto.subtle.generateKey('Ed25519',true,['sign','verify']);
+ f.hub.env.OPS_PUBLIC_KEY=Buffer.from(await crypto.subtle.exportKey('raw',keys.publicKey)).toString('hex');
+ f.policy={schema:1,revision:1,issuedAt:Date.now(),expiresAt:Date.now()+86400000,latest:'1.4.9',minimum:'1.4.9',scope:'discord',blocked:[],message:'새 버전을 설치하세요.',features:Object.fromEntries(['discord','link','items','capture'].map(k=>[k,{enabled:true,reason:''}])),releases:{'1.4.9':{sha256:'a'.repeat(64),size:123,url:'https://example.com/ErinnDesk.exe'}}};
+ f.access={mode:'all',users:[]};
+ const actualComplete=f.hub.complete.bind(f.hub);f.notices=[];f.hub.complete=async(key,pending,content,image=null,sensitive=false)=>{if(!image&&!sensitive){f.notices.push(content);await f.storage.delete(key);await f.storage.delete('busy:'+pending.agent);return false;}return actualComplete(key,pending,content,image,sensitive);};
+ f.envelope=async p=>{const payload=JSON.stringify(p);return {payload,signature:Buffer.from(await crypto.subtle.sign('Ed25519',keys.privateKey,new TextEncoder().encode(payload))).toString('base64')};};
+ f.publish=async(p=f.policy,a=f.access,expectedRevision=p.revision-1)=>f.hub.fetch(new Request('https://hub/admin/state',{method:'PUT',body:JSON.stringify({expectedRevision,envelope:await f.envelope(p),access:a})}));
+ return f;
+}
+
+test('operations admin routes require a separate credential and never forward failed authentication',async()=>{
+ let calls=0;const env={OPS_ADMIN_TOKEN:'x'.repeat(48),HUB:{idFromName:()=>'',get:()=>({fetch:async()=>{calls++;return new Response('{}');}})}};
+ assert.equal((await Worker.fetch(new Request('https://service/admin/state'),env)).status,401);assert.equal(calls,0);
+ assert.equal((await Worker.fetch(new Request('https://service/admin/state',{headers:{Authorization:'Bearer '+'x'.repeat(48)}}),env)).status,200);assert.equal(calls,1);
+ assert.equal((await Worker.fetch(new Request('https://service/admin/state'),{...env,OPS_ADMIN_TOKEN:''})).status,503);
+});
+
+test('signed policy publication is revision-checked; allowlist is private; rollback requires a new signature/revision',async()=>{
+ const f=await operationsFixture();f.access={mode:'allowlist',users:[{id:'123456789012345678',note:'private tester'}]};
+ assert.equal((await f.publish()).status,200);
+ const visible=await (await f.hub.fetch(new Request('https://hub/policy'))).json();assert.deepEqual(visible,await f.envelope(f.policy));assert(!JSON.stringify(visible).includes('private tester'));
+ assert.equal((await f.publish()).status,409);
+ f.policy={...f.policy,revision:2};f.policy.features.items.enabled=false;assert.equal((await f.publish()).status,200);
+ const history=await (await f.hub.fetch(new Request('https://hub/admin/history'))).json();assert.equal(history.length,1);assert.equal(history[0].revision,1);
+ const rollback={...JSON.parse(history[0].envelope.payload),revision:3};assert.equal((await f.publish(rollback,history[0].access,2)).status,200);
+ assert.equal((await f.hub.policyState()).policy.features.items.enabled,true);
+});
+
+test('tampering, expired policies and excessive admin bodies cannot change state',async()=>{
+ const f=await operationsFixture(),envelope=await f.envelope(f.policy);envelope.payload=envelope.payload.replace('1.4.9','9.9.9');
+ const put=body=>f.hub.fetch(new Request('https://hub/admin/state',{method:'PUT',body:JSON.stringify(body)}));
+ assert.equal((await put({expectedRevision:0,envelope,access:f.access})).status,400);
+ assert.equal((await f.publish({...f.policy,expiresAt:Date.now()-1})).status,400);
+ assert.equal((await f.hub.fetch(new Request('https://hub/admin/state',{method:'PUT',body:'x'.repeat(262145)}))).status,413);
+ assert.equal((await f.hub.policyState()).revision,0);
+});
+
+test('maintenance and private access changes block already-linked users while unlink remains available',async()=>{
+ const f=await operationsFixture();await f.publish();
+ await f.storage.put('agent:pc-a',{user:'user-a',version:'1.4.9'});await f.storage.put('user:user-a',{agent:'pc-a'});
+ assert.equal((await (await f.hub.discord(command('아이템',[{name:'이름',value:'가죽'}]))).json()).type,5);
+ f.policy={...f.policy,revision:2};f.access={mode:'allowlist',users:[]};await f.publish();
+ const blocked=await (await f.hub.discord(command('아이템',[{name:'이름',value:'가죽'}]))).json();assert.match(blocked.data.content,/허용된 사용자/);
+ assert.equal((await f.storage.list({prefix:'query:'})).size,0);
+ const oldFetch=globalThis.fetch;globalThis.fetch=async()=>new Response('{}');
+ try{assert.match((await (await f.hub.discord(command('연결해제'))).json()).data.content,/해제했습니다/);await Promise.all(f.tasks);}finally{globalThis.fetch=oldFetch;}
+});
+
+test('feature maintenance applies to pairing approval and in-flight sensitive results',async()=>{
+ const f=await operationsFixture();await f.publish();await f.storage.put('agent:pc-a',{user:'user-a',version:'1.4.9'});await f.storage.put('user:user-a',{agent:'pc-a'});
+ const c=command('아이템',[{name:'이름',value:'가죽'}]);await f.hub.discord(c);
+ f.policy={...f.policy,revision:2};f.policy.features.items={enabled:false,reason:'아이템 점검'};f.policy.features.link={enabled:false,reason:'신규 연결 점검'};await f.publish();
+ assert.equal(await f.storage.get('query:'+c.id),undefined);
+ let delivered=0;const before=globalThis.fetch;globalThis.fetch=async()=>{delivered++;return new Response('{}');};
+ try{await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'result',id:c.id,result:{ok:true,items:[]}}));await Promise.all(f.tasks);assert.equal(delivered,0);}finally{globalThis.fetch=before;}
+ await f.storage.put('pending:pc-a',{nonce:'nonce',user:'user-b',name:'test',until:Date.now()+10000});
+ await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'approve',nonce:'nonce'}));assert.equal((await f.storage.get('agent:pc-a')).user,'user-a');assert.match(f.socket.messages.at(-1).message,/신규 연결 점검/);
+});
+
+test('minimum version, exact blocked version and policy expiry stop remote requests',async()=>{
+ const f=await operationsFixture();await f.publish();await f.storage.put('user:user-a',{agent:'pc-a'});
+ for(const v of ['', '1.4.8']){await f.storage.put('agent:pc-a',{user:'user-a',version:v});assert.match((await (await f.hub.discord(command('연결상태'))).json()).data.content,/새 버전/);}
+ f.policy={...f.policy,revision:2,blocked:['1.4.9']};await f.publish();await f.storage.put('agent:pc-a',{user:'user-a',version:'1.4.9'});assert.match((await (await f.hub.discord(command('연결상태'))).json()).data.content,/새 버전/);
+ const state=await f.storage.get('ops:current');const p=JSON.parse(state.envelope.payload);p.expiresAt=Date.now()-1;state.envelope=await f.envelope(p);await f.storage.put('ops:current',state);
+ assert.match((await (await f.hub.discord(command('연결상태'))).json()).data.content,/유효기간/);
+});
+
+test('legacy grace permits absent version only and never bypasses explicit blocked or malformed versions',async()=>{
+ const f=await operationsFixture();f.policy.legacyUntil=Date.now()+60000;f.policy.blocked=['1.4.9'];assert.equal((await f.publish()).status,200);
+ for(const v of ['', '1.4.8','garbage','1.4.9']){
+  const r=await f.hub.fetch(new Request('https://hub/register',{method:'POST',headers:{'X-Client-Hash':'legacy-'+v,'X-Erinn-Version':v}}));
+  assert.equal(r.status,v===''?200:403);
+ }
+ await f.storage.put('agent:pc-a',{user:'user-a'});await f.storage.put('user:user-a',{agent:'pc-a'});
+ assert.match((await (await f.hub.discord(command('연결상태'))).json()).data.content,/PC와 연결/);
+ const query=command('아이템',[{name:'이름',value:'가죽'}]);assert.equal((await (await f.hub.discord(query)).json()).type,5);
+ const pending=await f.storage.get('query:'+query.id);assert.equal(await f.hub.authorized(pending),true);
+ const clock=Date.now;Date.now=()=>f.policy.legacyUntil;
+ try{
+  assert.equal(await f.hub.authorized(pending),false);
+  const blocked=(await (await f.hub.discord(command('연결상태'))).json()).data.content;
+  assert.match(blocked,/새 버전/);assert.match(blocked,/https:\/\/example.com\/ErinnDesk.exe/);
+  assert.match((await (await f.hub.discord(command('연결해제'))).json()).data.content,/해제했습니다/);
+ }finally{Date.now=clock;}
+});
+
+test('legacy grace still enforces maintenance, allowlist and policy expiration',async()=>{
+ const f=await operationsFixture();f.policy.legacyUntil=Date.now()+60000;f.policy.features.items={enabled:false,reason:'아이템 점검'};await f.publish();
+ await f.storage.put('agent:pc-a',{user:'user-a'});await f.storage.put('user:user-a',{agent:'pc-a'});
+ assert.match((await (await f.hub.discord(command('아이템',[{name:'이름',value:'가죽'}]))).json()).data.content,/아이템 점검/);
+ f.policy={...f.policy,revision:2};f.access={mode:'allowlist',users:[]};await f.publish();
+ assert.match((await (await f.hub.discord(command('연결상태'))).json()).data.content,/허용된 사용자/);
+ const clock=Date.now;Date.now=()=>f.policy.expiresAt;
+ try{assert.match((await (await f.hub.discord(command('연결상태'))).json()).data.content,/유효기간/);}finally{Date.now=clock;}
+});
+
+test('legacy grace timestamp is optional, bounded and cannot silently be renewed with the policy',async()=>{
+ for(const value of [-1,true,'tomorrow',1.5]){
+  const f=await operationsFixture();f.policy.legacyUntil=value;assert.equal((await f.publish()).status,400);
+ }
+ const f=await operationsFixture();f.policy.legacyUntil=f.policy.expiresAt+1;assert.equal((await f.publish()).status,400);
+ f.policy.legacyUntil=Date.now()+10000;assert.equal((await f.publish()).status,200);
+ const deadline=f.policy.legacyUntil;f.policy={...f.policy,revision:2,expiresAt:f.policy.expiresAt+10000};assert.equal((await f.publish()).status,200);
+ assert.equal((await f.hub.policyState()).policy.legacyUntil,deadline);
+ f.policy={...f.policy,revision:3,legacyUntil:0};assert.equal((await f.publish()).status,200);
+ assert.match(await f.hub.denied('discord',null,''),/새 버전/);
 });

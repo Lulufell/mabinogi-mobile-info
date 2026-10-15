@@ -46,7 +46,6 @@ def registration_error(exc,token):
  return f'명령 등록 실패 (HTTP {exc.code}).'+ ('\n'+text if text else '\nDiscord에서 상세 오류를 받지 못했습니다.')
 
 COMMANDS=[
- {'name':'테스트','description':'PC 연결 없이 봇 응답과 서버 배포 버전을 확인합니다.'},
  {'name':'연결','description':'에린 데스크의 일회용 코드로 내 PC를 연결합니다.','options':[{'type':3,'name':'코드','description':'PC에서 생성한 연결 코드','required':True,'min_length':10,'max_length':10}]},
  {'name':'아이템','description':'연결된 PC에서 아이템의 가방·창고 수량을 조회합니다.','options':[{'type':3,'name':'이름','description':'조회할 품목 이름 또는 검색어','required':True,'min_length':1,'max_length':120}]},
  {'name':'연결상태','description':'내 PC의 원격 연결 상태를 확인합니다.'},

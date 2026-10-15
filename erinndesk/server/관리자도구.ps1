@@ -1,6 +1,8 @@
-param([ValidateSet('install','login','deploy','dev')][string]$Action='install')
+param([ValidateSet('install','login','deploy','dev','ops','web')][string]$Action='install')
 $ErrorActionPreference='Stop'
 Set-Location -LiteralPath $PSScriptRoot
+if($Action -eq 'web'){ & python (Join-Path $PSScriptRoot 'admin_web.py'); exit $LASTEXITCODE }
+if($Action -eq 'ops'){ & python (Join-Path $PSScriptRoot 'operations.py'); exit $LASTEXITCODE }
 $npmTool=Get-Command npm.cmd -ErrorAction SilentlyContinue
 $pnpmTool=Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\fallback\pnpm.cmd'
 $nodeTool=Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'
