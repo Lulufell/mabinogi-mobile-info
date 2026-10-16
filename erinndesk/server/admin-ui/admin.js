@@ -55,7 +55,7 @@
   if(!entries.length)root.append(node('p','등록된 배포 파일이 없습니다.','empty'));
   for(const [v,r]of entries){
    const record=node('article',undefined,'release-record'),head=node('div',undefined,'release-record-head'),info=node('div',undefined,'release-version');
-   info.append(node('strong',v));if(v===policy.latest)info.append(node('span','최신','version-label'));info.append(node('span',(r.size/1024/1024).toFixed(1)+' MB','size'));head.append(info);
+   info.append(node('strong',v),node('span',(r.size/1024/1024).toFixed(1)+' MB','size'));if(v===policy.latest)info.append(node('span','최신','version-label'));head.append(info);
    if(remote.policy?.releases[v]){const button=node('button','주소 변경','small');button.dataset.edit='';button.dataset.versionUrl=v;button.onclick=()=>{urlVersion=v;$('#urlDialogTitle').textContent=v+' 다운로드 주소 변경';$('#newReleaseUrl').value=r.url;$('#urlStatus').textContent='';$('#urlStatus').classList.remove('error');$('#urlDialog').showModal();};head.append(button);}else head.append(node('span','미적용','hint'));
    const url=node('div',undefined,'release-detail'),link=node('a',r.url);link.href=r.url;link.target='_blank';link.rel='noopener noreferrer';url.append(node('span','다운로드'),link);
    const hash=node('div',undefined,'release-detail');hash.append(node('span','SHA256'),node('code',r.sha256));record.append(head,url,hash);root.append(record);
@@ -128,7 +128,7 @@
  const requestReload=()=>{if(dirty)$('#discardDialog').showModal();else load();};$('#refresh').onclick=requestReload;$('#discard').onclick=requestReload;$('#keepDraft').onclick=()=>$('#discardDialog').close();$('#confirmDiscard').onclick=()=>{$('#discardDialog').close();load();};
  window.addEventListener('hashchange',()=>{if(new URLSearchParams(location.hash.slice(1)).has('session')){acceptSession();requestReload();}});
  $('#preview').onclick=()=>preview();$('#renew').onclick=()=>preview();$('#loadHistory').onclick=loadHistory;$('#cancelApply').onclick=()=>{$('#confirm').close();ticket=null;};
- $('#commit').onclick=async()=>{if(busy||!ticket)return;const pending=ticket;ticket=null;setBusy(true);try{await api('/api/commit',{ticket:pending});$('#confirm').close();await load();status('운영 서버에 적용했습니다.');}catch(e){$('#confirmError').textContent=e.message+' 새로고침으로 서버 상태를 확인한 뒤 다시 진행해주세요.';}finally{setBusy(false);if(!ticket)$('#commit').disabled=true;}};
+ $('#commit').onclick=async()=>{if(busy||!ticket)return;const pending=ticket;ticket=null;setBusy(true);try{await api('/api/commit',{ticket:pending});$('#confirm').close();await load();$('#draftStatus').textContent='운영 서버에 적용했습니다.';}catch(e){$('#confirmError').textContent=e.message+' 새로고침으로 서버 상태를 확인한 뒤 다시 진행해주세요.';}finally{setBusy(false);if(!ticket)$('#commit').disabled=true;}};
  $('#confirm').addEventListener('close',()=>{ticket=null;});
  $('#theme').onclick=()=>{const light=document.documentElement.dataset.theme!=='light';document.documentElement.dataset.theme=light?'light':'dark';$('#theme').textContent=light?'라이트 모드':'다크 모드';localStorage.setItem('erinn-admin-theme',light?'light':'dark');};
  if(localStorage.getItem('erinn-admin-theme')==='light')$('#theme').click();

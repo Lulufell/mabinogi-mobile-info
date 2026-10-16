@@ -11,3 +11,5 @@
 @media(max-width:600px){.release-version{flex-wrap:wrap;gap:7px}.release-detail{grid-template-columns:1fr;gap:2px}.grace-controls{flex-wrap:wrap}.grace-controls label{flex-basis:100%}}
 
 .blocked-detail{display:grid;grid-template-columns:84px minmax(0,1fr);gap:12px;font-size:12px;line-height:1.8;margin-top:8px}.blocked-detail>span{color:var(--muted)}.blocked-detail p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}.sidebar nav button{white-space:normal;line-height:1.5}
+
+.sidebar nav button.two-line{white-space:nowrap}.two-line>span{display:block}

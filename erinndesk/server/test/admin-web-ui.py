@@ -23,7 +23,7 @@ try:
   page.get_by_role('button',name='디스코드 기능 점검',exact=True).click();page.locator('#feature-capture').uncheck();page.locator('#reason-capture').fill('캡처 기능 점검 중입니다.')
   page.locator('#preview').click();expect(page.locator('#confirm')).to_be_visible();expect(page.locator('#changes')).to_contain_text('캡처 기능 점검 중입니다.');assert fixture.writes==[]
   page.screenshot(path=str(out/'confirm-changes.png'));page.locator('#cancelApply').click();assert fixture.writes==[]
-  page.locator('#preview').click();page.locator('#commit').click();expect(page.locator('#status')).to_contain_text('운영 서버에 적용했습니다');assert len(fixture.writes)==1
+  page.locator('#preview').click();page.locator('#commit').click();expect(page.locator('#draftStatus')).to_contain_text('운영 서버에 적용했습니다');expect(page.locator('#status')).not_to_contain_text('운영 서버에 적용했습니다');assert len(fixture.writes)==1
   expect(page.locator('#feature-capture')).not_to_be_checked()
   page.get_by_role('button',name='버전 관리',exact=True).click();file=Path(folder)/'ErinnDesk.exe';file.write_bytes(b'local fake EXE test fixture')
   expect(page.locator('#releases')).to_contain_text('https://example.com/app.exe')
@@ -57,7 +57,7 @@ try:
   page.locator('#userId').fill('123456789012345678');page.locator('#userNote').fill('<테스터>');page.locator('#addUser').click();expect(page.locator('#users')).to_contain_text('<테스터>');assert page.locator('#users script').count()==0
   page.locator('#blockedUserId').fill('123456789012345678');page.locator('#blockedUserNote').fill('관리자 전용 메모');page.locator('#blockedUserReason').fill('테스트 안내 사유');page.locator('#addBlockedUser').click()
   expect(page.locator('#blockedUsers')).to_contain_text('사유 : 테스트 안내 사유');expect(page.locator('#blockedUsers')).to_contain_text('관리자 전용 메모')
-  page.locator('#preview').click();expect(page.locator('#changes')).to_contain_text('허용 목록만');expect(page.locator('#changes')).to_contain_text('1.4.10');expect(page.locator('#changes')).to_contain_text('테스트 안내 사유');page.locator('#commit').click();expect(page.locator('#status')).to_contain_text('운영 서버에 적용했습니다');assert len(fixture.writes)==2;assert fixture.state['access']['blockedUsers'][0]['reason']=='테스트 안내 사유'
+  page.locator('#preview').click();expect(page.locator('#changes')).to_contain_text('허용 목록만');expect(page.locator('#changes')).to_contain_text('1.4.10');expect(page.locator('#changes')).to_contain_text('테스트 안내 사유');page.locator('#commit').click();expect(page.locator('#draftStatus')).to_contain_text('운영 서버에 적용했습니다');expect(page.locator('#status')).not_to_contain_text('운영 서버에 적용했습니다');assert len(fixture.writes)==2;assert fixture.state['access']['blockedUsers'][0]['reason']=='테스트 안내 사유'
   page.locator('#theme').click();expect(page.locator('html')).to_have_attribute('data-theme','light');page.screenshot(path=str(out/'access-light.png'),full_page=True)
   page.get_by_role('button',name='변경 이력',exact=True).click();page.get_by_role('button',name='이 설정으로 복원').first.click();expect(page.locator('#confirm')).to_be_visible();assert len(fixture.writes)==2;page.locator('#cancelApply').click()
   page.get_by_role('button',name='버전 관리',exact=True).click();page.locator('#updateMessage').fill('아직 미적용');page.locator('#discard').click();expect(page.locator('#discardDialog')).to_be_visible();page.locator('#confirmDiscard').click();expect(page.locator('#updateMessage')).not_to_have_value('아직 미적용')

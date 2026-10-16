@@ -404,3 +404,48 @@ test('blacklist blocks linked commands and late results but allows unlink withou
  let delivered=0;const oldFetch=globalThis.fetch;globalThis.fetch=async()=>{delivered++;return new Response('{}');};
  try{await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'result',id:c.id,result:{ok:true,items:[]}}));await Promise.all(f.tasks);assert.equal(delivered,0);assert.match((await (await f.hub.discord(command('연결해제'))).json()).data.content,/해제했습니다/);await Promise.all(f.tasks);}finally{globalThis.fetch=oldFetch;}
 });
+
+function oauthFixture(){
+ const f=setup();Object.assign(f.hub.env,{DISCORD_APPLICATION_ID:'123456789012345678',DISCORD_CLIENT_SECRET:'fixture-secret',OAUTH_REDIRECT_URI:'https://example.com/oauth/callback',OAUTH_TEST_USERS:'123456789012345678'});return f;
+}
+async function oauthBegin(f){
+ f.socket.session='fixture-session';await f.storage.put('agent:pc-a',{session:f.socket.session,oauthTest:true,version:'0.0.1'});
+ await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'oauth-start'}));
+ const url=new URL(f.socket.messages.at(-1).url);assert.equal(url.origin,'https://discord.com');assert.equal(url.searchParams.get('scope'),'identify');assert(!url.href.includes('fixture-secret'));return url.searchParams.get('state');
+}
+function mockOAuth(user='123456789012345678'){
+ const old=globalThis.fetch,calls=[];globalThis.fetch=async(url,init)=>{calls.push(String(url));if(String(url).endsWith('/oauth2/token'))return Response.json({access_token:'fixture-token',scope:'identify'});if(String(url).endsWith('/users/@me'))return Response.json({id:user,username:'tester'});return new Response('{}');};return {calls,restore:()=>globalThis.fetch=old};
+}
+test('OAuth requires one-use state and original authenticated app finalization, discards token',async()=>{
+ const f=oauthFixture(),state=await oauthBegin(f),mock=mockOAuth();
+ try{
+  const callback=()=>f.hub.fetch(new Request('https://example.com/oauth/callback?state='+state+'&code=fixture'));
+  assert.equal((await callback()).status,200);assert.equal(await f.storage.get('user:123456789012345678'),undefined);assert.equal(mock.calls.at(-1),'https://discord.com/api/v10/oauth2/token/revoke');
+  assert.equal((await callback()).status,400);
+  const ready=f.socket.messages.at(-1);assert.equal(ready.type,'oauth-ready');
+  await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'oauth-finish',nonce:'wrong'}));assert.equal(await f.storage.get('user:123456789012345678'),undefined);
+  await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'oauth-finish',nonce:ready.nonce}));assert.equal((await f.storage.get('user:123456789012345678')).agent,'pc-a');assert.equal(f.socket.messages.at(-1).type,'linked');
+  assert(!JSON.stringify([...f.storage.values]).includes('fixture-token'));
+ }finally{mock.restore();}
+});
+test('OAuth test exemptions cannot bypass tester restriction, maintenance, blacklist or expired sessions',async()=>{
+ const f=oauthFixture(),state=await oauthBegin(f),mock=mockOAuth('999999999999999999');
+ try{assert.equal((await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+state+'&code=x'))).status,400);assert.equal(await f.storage.get('oauth-ready:pc-a'),undefined);}finally{mock.restore();}
+ const next=await oauthBegin(f);const agent=await f.storage.get('agent:pc-a');agent.session='replaced';await f.storage.put('agent:pc-a',agent);
+ assert.equal((await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+next+'&code=x'))).status,409);
+ f.hub.env.OAUTH_TEST_USERS='';assert.equal((await f.hub.fetch(new Request('https://hub/register-test',{method:'POST'}))).status,403);
+ const configured=await operationsFixture();await configured.publish();configured.hub.env.OAUTH_TEST_USERS='123456789012345678';
+ assert.equal(await configured.hub.denied('items','123456789012345678','0.0.1',{oauthTest:true}),null);
+ const current=await configured.storage.get('ops:current');current.access={mode:'all',users:[],blockedUsers:[{id:'123456789012345678',note:'private',reason:'blocked'}]};await configured.storage.put('ops:current',current);
+ assert.match(await configured.hub.denied('items','123456789012345678','0.0.1',{oauthTest:true}),/사유 : blocked/);
+ current.access.mode='maintenance';await configured.storage.put('ops:current',current);assert.match(await configured.hub.denied('items','123456789012345678','0.0.1',{oauthTest:true}),/점검/);
+});
+
+test('OAuth cancellation during network exchange and expired state cannot bind an account',async()=>{
+ const f=oauthFixture(),state=await oauthBegin(f),old=globalThis.fetch;
+ globalThis.fetch=async url=>{if(String(url).endsWith('/oauth2/token')){await f.hub.unlink('pc-a');return Response.json({access_token:'t',scope:'identify'});}if(String(url).endsWith('/users/@me'))return Response.json({id:'123456789012345678',username:'tester'});return new Response('{}');};
+ try{assert.equal((await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+state+'&code=x'))).status,409);assert.equal(await f.storage.get('user:123456789012345678'),undefined);}finally{globalThis.fetch=old;}
+ const expired=await oauthBegin(f),record=await f.storage.get('oauth:'+expired);record.until=Date.now()-1;await f.storage.put('oauth:'+expired,record);
+ assert.equal((await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+expired+'&code=x'))).status,400);
+ const agent=await f.storage.get('agent:pc-a');agent.oauthTest=false;await f.storage.put('agent:pc-a',agent);await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'oauth-start'}));assert.match(f.socket.messages.at(-1).message,/테스트 빌드/);
+});

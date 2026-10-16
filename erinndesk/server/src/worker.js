@@ -24,11 +24,12 @@ export default {
       if (data.application_id !== env.DISCORD_APPLICATION_ID || data.guild_id !== env.DISCORD_GUILD_ID) return reply('에린 데스크 전용 디스코드 서버에서 사용하세요.');
       return hub.fetch(new Request('https://hub/discord',{method:'POST',body:JSON.stringify(data)}));
     }
-    if (path === '/register' && request.method === 'POST') {
+    if (['/register','/register-test'].includes(path) && request.method === 'POST') {
       const ip=request.headers.get('CF-Connecting-IP');
       if (!ip && !env.LOCAL_TEST) return json({error:'missing_ip'},403);
-      return hub.fetch(new Request('https://hub/register',{method:'POST',headers:{'X-Client-Hash':await hash(ip || 'local'),'X-Erinn-Version':request.headers.get('X-Erinn-Version')||''}}));
+      return hub.fetch(new Request('https://hub'+path,{method:'POST',headers:{'X-Client-Hash':await hash(ip || 'local'),'X-Erinn-Version':request.headers.get('X-Erinn-Version')||''}}));
     }
+    if (path === '/oauth/callback' && request.method === 'GET') return hub.fetch(request);
     if (path === '/agent' && request.method === 'GET') return hub.fetch(request);
     if (/^\/capture\/\d{1,25}$/.test(path) && request.method === 'POST') return hub.fetch(request);
     return json({error:'not_found'},404);
@@ -49,8 +50,14 @@ export class RemoteHub extends DurableObject {
     const value=await this.store.get('ops:current');
     return value ? {...value,policy:JSON.parse(value.envelope.payload)} : {policy:null,access:{mode:'all',users:[]},revision:0};
   }
-  async denied(feature,user,clientVersion) {
-    const state=await this.policyState();return denial(state.policy,state.access,feature,user,clientVersion);
+  async denied(feature,user,clientVersion,agent=null) {
+    const state=await this.policyState();
+    if(agent?.oauthTest){
+      const testers=(this.env.OAUTH_TEST_USERS||'').split(',').map(v=>v.trim()).filter(v=>/^\d{17,22}$/.test(v));
+      if(!testers.length || (user&&!testers.includes(user)))return 'OAuth 테스트가 허용된 계정만 연결할 수 있습니다.';
+      clientVersion=undefined;
+    }
+    return denial(state.policy,state.access,feature,user,clientVersion);
   }
   async operations(request,path) {
     if(path==='/policy'&&request.method==='GET') {
@@ -85,7 +92,7 @@ export class RemoteHub extends DurableObject {
         for(const [key,pending]of await this.store.list({prefix:'query:'})){
           if(!await this.authorized(pending)){
             const agent=await this.store.get('agent:'+pending.agent);
-            const reason=await this.denied(pending.kind==='capture'?'capture':'items',pending.user,agent?.version||'');
+            const reason=await this.denied(pending.kind==='capture'?'capture':'items',pending.user,agent?.version||'',agent);
             await this.complete(key,pending,reason||'운영 설정이 변경되어 요청을 취소했습니다.');
           }
         }
@@ -99,13 +106,15 @@ export class RemoteHub extends DurableObject {
     const path=new URL(request.url).pathname;
     if(path==='/policy'||path.startsWith('/admin/'))return this.operations(request,path);
     if(/^\/capture\/\d{1,25}$/.test(path)&&request.method==='POST')return this.captureUpload(request);
-    if(path==='/register')return this.ctx.blockConcurrencyWhile(async()=>{
-      const reason=await this.denied('link',null,request.headers.get('X-Erinn-Version')||'');if(reason)return json({error:reason},403);
+    if(path==='/oauth/callback'&&request.method==='GET')return this.oauthCallback(request);
+    if(path==='/register'||path==='/register-test')return this.ctx.blockConcurrencyWhile(async()=>{
+      const oauthTest=path==='/register-test';
+      const reason=await this.denied('link',null,request.headers.get('X-Erinn-Version')||'',{oauthTest});if(reason)return json({error:reason},403);
       if(await this.limited('registration-global',30,60000))return json({error:'registration_rate_limited'},429);
       if(await this.limited('reg:'+request.headers.get('X-Client-Hash'),5,3600000))return json({error:'registration_rate_limited'},429);
       const id=crypto.randomUUID(),secret=crypto.randomUUID()+crypto.randomUUID();
       const now=Date.now(),until=now+30*60000;
-      await this.store.put('agent:'+id,{hash:await hash(secret),created:now,registrationUntil:until,version:request.headers.get('X-Erinn-Version')||''});
+      await this.store.put('agent:'+id,{oauthTest,hash:await hash(secret),created:now,registrationUntil:until,version:request.headers.get('X-Erinn-Version')||''});
       await this.store.put('unapproved:'+id,{until});await this.schedule();
       return json({id,secret});
     });
@@ -141,12 +150,13 @@ export class RemoteHub extends DurableObject {
     if(await this.limited('rate:'+user.id,10,60000))return finish(reply('1분에 최대 10번 사용할 수 있습니다. 잠시 후 다시 요청하세요.'));
     const options=Object.fromEntries((data.data?.options || []).map(o=>[o.name,o.value])),command=data.data?.name;
     if(!['연결','아이템','연결상태','스크린샷','연결해제'].includes(command))return finish(reply('지원하지 않는 명령입니다.'));
-    if(command!=='연결해제'){const reason=await this.denied(command==='연결'?'link':command==='스크린샷'?'capture':command==='아이템'?'items':'discord',user.id);if(reason)return finish(reply(reason));}
+    const knownLink=await this.store.get('user:'+user.id),knownAgent=knownLink&&await this.store.get('agent:'+knownLink.agent);
+    if(command!=='연결해제'){const reason=await this.denied(command==='연결'?'link':command==='스크린샷'?'capture':command==='아이템'?'items':'discord',user.id,undefined,knownAgent);if(reason)return finish(reply(reason));}
     if(command==='연결') {
       if(typeof options['코드']!=='string' || !/^[A-Z2-9]{10}$/.test(options['코드'].toUpperCase()))return finish(reply('PC의 에린 데스크에서 새 연결 코드를 생성해 입력하세요.'));
       const key='code:'+options['코드'].toUpperCase(),code=await this.store.get(key);
       if(!code || code.until<Date.now())return finish(reply('연결 코드가 만료되었거나 올바르지 않습니다. PC에서 다시 생성하세요.'));
-      const candidate=await this.store.get('agent:'+code.agent);const reason=await this.denied('link',user.id,candidate?.version||'');if(reason)return finish(reply(reason));
+      const candidate=await this.store.get('agent:'+code.agent);const reason=await this.denied('link',user.id,candidate?.version||'',candidate);if(reason)return finish(reply(reason));
       const existing=await this.store.get('pending:'+code.agent);
       if(existing?.until>Date.now())return finish(reply('PC에서 이전 연결 요청을 확인하고 있습니다. 잠시 후 다시 시도하세요.'));
       if(!this.sockets(code.agent).length)return finish(reply('PC 연결이 끊겼습니다. 앱 연결 상태를 확인하세요.'));
@@ -159,7 +169,7 @@ export class RemoteHub extends DurableObject {
     const linkedAgent=link&&await this.store.get('agent:'+link.agent);
     if(!link||linkedAgent?.user!==user.id)return finish(reply('연결된 PC가 없습니다. PC에서 코드를 생성한 뒤 /연결을 사용하세요.'));
     if(command==='연결해제') {await this.unlink(link.agent);return finish(reply('PC 연결을 해제했습니다.'));}
-    const policyReason=await this.denied(command==='스크린샷'?'capture':command==='아이템'?'items':'discord',user.id,linkedAgent.version||'');if(policyReason)return finish(reply(policyReason));
+    const policyReason=await this.denied(command==='스크린샷'?'capture':command==='아이템'?'items':'discord',user.id,linkedAgent.version||'',linkedAgent);if(policyReason)return finish(reply(policyReason));
     if(command==='연결상태')return finish(reply(this.sockets(link.agent).length?'PC와 연결되어 있습니다. /아이템으로 수량을 조회하세요.':'등록된 PC가 오프라인입니다. 게임과 에린 데스크를 켜 주세요.'));
     const screenshot=command==='스크린샷';
     if(!screenshot&&(command!=='아이템' || !validateName(options['이름'])))return finish(reply('품목 이름을 1~120자로 입력하세요.'));
@@ -173,12 +183,74 @@ export class RemoteHub extends DurableObject {
     this.send(link.agent,{type:screenshot?'capture':'query',id:data.id,user:user.id,...(!screenshot?{name:options['이름'].trim()}:{}),until:pending.until});
     return finish(json({type:5,data:{flags:64}}));
   }
+  oauthConfigured(){
+    try{const u=new URL(this.env.OAUTH_REDIRECT_URI);return Boolean(this.env.DISCORD_CLIENT_SECRET&&u.protocol==='https:'&&u.pathname==='/oauth/callback'&&!u.search&&!u.hash&&!u.username&&!u.password);}catch{return false;}
+  }
+  async oauthStart(id,agent,ws){
+    const fail=message=>ws.send(JSON.stringify({type:'error',message}));
+    if(!agent.oauthTest)return fail('OAuth 테스트 빌드에서만 사용할 수 있습니다.');
+    if(!this.oauthConfigured())return fail('디스코드 로그인 인증이 서버에 설정되지 않았습니다.');
+    const reason=await this.denied('link',agent.user,agent.version||'',agent);if(reason)return fail(reason);
+    if(await this.limited('pair-rate:'+id,5,60000))return fail('잠시 후 다시 연결해 주세요.');
+    for(const [key,value]of await this.store.list({prefix:'oauth:'}))if(value.agent===id)await this.store.delete(key);
+    await this.store.delete('oauth-ready:'+id);
+    const state=crypto.randomUUID()+crypto.randomUUID(),until=Date.now()+300000;
+    await this.store.put('oauth:'+state,{agent:id,session:agent.session,until});await this.store.put('oauth-flow:'+id,{state,until});await this.schedule();
+    const url=new URL('https://discord.com/oauth2/authorize');url.search=new URLSearchParams({client_id:this.env.DISCORD_APPLICATION_ID,response_type:'code',redirect_uri:this.env.OAUTH_REDIRECT_URI,scope:'identify',state,prompt:'consent'}).toString();
+    ws.send(JSON.stringify({type:'oauth-url',url:url.href}));
+  }
+  async oauthCallback(request){
+    const html=(text,status=200)=>new Response(text,{status,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'}});
+    if(!this.oauthConfigured())return html('인증 설정이 준비되지 않았습니다.',503);
+    const url=new URL(request.url),state=url.searchParams.get('state')||'';
+    if(!/^[a-f0-9-]{72}$/.test(state))return html('올바르지 않은 인증 요청입니다.',400);
+    const pending=await this.ctx.blockConcurrencyWhile(async()=>{const value=await this.store.get('oauth:'+state);await this.store.delete('oauth:'+state);return value;});
+    if(!pending||pending.until<=Date.now())return html('인증 요청이 만료되었습니다. 앱에서 다시 시작하세요.',400);
+    const agent=await this.store.get('agent:'+pending.agent);
+    if(!agent||agent.session!==pending.session||!this.sockets(pending.agent).length)return html('앱 연결이 변경되었습니다. 앱에서 다시 시작하세요.',409);
+    const fail=message=>{this.send(pending.agent,{type:'error',message});return html(message,400);};
+    if(url.searchParams.has('error'))return fail('디스코드 로그인이 취소되었습니다.');
+    const code=url.searchParams.get('code');if(!code||code.length>2048)return fail('인증 코드를 확인하지 못했습니다.');
+    let token;
+    try{
+      const response=await fetch('https://discord.com/api/v10/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:this.env.DISCORD_APPLICATION_ID,client_secret:this.env.DISCORD_CLIENT_SECRET,grant_type:'authorization_code',code,redirect_uri:this.env.OAUTH_REDIRECT_URI}),signal:AbortSignal.timeout(10000)});
+      if(!response.ok)throw Error();token=await response.json();if(typeof token.access_token!=='string'||!token.scope?.split(' ').includes('identify'))throw Error();
+      const identity=await fetch('https://discord.com/api/v10/users/@me',{headers:{Authorization:'Bearer '+token.access_token},signal:AbortSignal.timeout(10000)});if(!identity.ok)throw Error();
+      const user=await identity.json();if(!/^\d{17,22}$/.test(user.id)||typeof user.username!=='string')throw Error();
+      return await this.ctx.blockConcurrencyWhile(async()=>{
+      const current=await this.store.get('agent:'+pending.agent),flow=await this.store.get('oauth-flow:'+pending.agent);
+      if(!current||current.session!==pending.session||flow?.state!==state||pending.until<=Date.now())return html('인증 요청이 변경되거나 만료되었습니다. 앱에서 다시 시작하세요.',409);
+      const reason=await this.denied('link',user.id,current.version||'',current);if(reason)return fail(reason);
+      const prior=await this.store.get('user:'+user.id);
+      if((current.user&&current.user!==user.id)||(prior&&prior.agent!==pending.agent))return fail('이미 다른 연결이 있습니다. 기존 연결을 해제한 뒤 다시 시도하세요.');
+      const nonce=crypto.randomUUID();await this.store.put('oauth-ready:'+pending.agent,{nonce,user:user.id,name:(user.global_name||user.username).slice(0,100),session:pending.session,until:Date.now()+60000});await this.schedule();
+      await this.store.delete('oauth-flow:'+pending.agent);
+      this.send(pending.agent,{type:'oauth-ready',nonce});return html('디스코드 인증을 확인했습니다. Erinn Desk 앱에서 연결 결과를 확인하세요.');
+      });
+    }catch{return fail('디스코드 인증을 완료하지 못했습니다. 앱에서 다시 시도하세요.');}
+    finally{if(token?.access_token)try{await fetch('https://discord.com/api/v10/oauth2/token/revoke',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:this.env.DISCORD_APPLICATION_ID,client_secret:this.env.DISCORD_CLIENT_SECRET,token:token.access_token,token_type_hint:'access_token'}),signal:AbortSignal.timeout(5000)});}catch{}}
+  }
+  async oauthFinish(id,agent,ws,nonce){
+    const ready=await this.store.get('oauth-ready:'+id);
+    if(!ready||ready.until<=Date.now()||ready.session!==agent.session||nonce!==ready.nonce)return;
+    await this.store.delete('oauth-ready:'+id);
+    const reason=await this.denied('link',ready.user,agent.version||'',agent);if(reason){ws.send(JSON.stringify({type:'error',message:reason}));return;}
+    const prior=await this.store.get('user:'+ready.user);
+    if((prior&&prior.agent!==id)||(agent.user&&agent.user!==ready.user)){ws.send(JSON.stringify({type:'error',message:'기존 연결을 해제한 뒤 다시 시도하세요.'}));return;}
+    await this.unlink(id);agent=await this.store.get('agent:'+id);
+    agent.user=ready.user;agent.userName=ready.name;agent.linkVersion=crypto.randomUUID();agent.approvedAt=Date.now();delete agent.registrationUntil;
+    await this.store.delete('unapproved:'+id);await this.store.put('agent:'+id,agent);await this.store.put('user:'+ready.user,{agent:id});
+    ws.send(JSON.stringify({type:'linked',linked:{id:ready.user,name:ready.name}}));
+  }
   async unlink(id) {
     const agent=await this.store.get('agent:'+id);if(!agent)return;
     if(agent.user&&(await this.store.get('user:'+agent.user))?.agent===id)await this.store.delete('user:'+agent.user);
     agent.linkVersion=crypto.randomUUID();
     delete agent.user;delete agent.userName;await this.store.put('agent:'+id,agent);
     await this.store.delete('pending:'+id);
+    await this.store.delete('oauth-ready:'+id);
+    await this.store.delete('oauth-flow:'+id);
+    for(const [key,value]of await this.store.list({prefix:'oauth:'}))if(value.agent===id)await this.store.delete(key);
     const codes=await this.store.list({prefix:'code:'});
     for(const [key,code]of codes)if(code.agent===id)await this.store.delete(key);
     const queries=await this.store.list({prefix:'query:'});
@@ -194,8 +266,10 @@ export class RemoteHub extends DurableObject {
       const socketAgent=await this.store.get('agent:'+id);
       if(!socketAgent||socketAgent.session!==ws.deserializeAttachment()?.session){ws.close(1008,'Session replaced or registration removed');return;}
       if(await this.expireRegistration(id,socketAgent))return;
+      if(data.type==='oauth-start'){await this.oauthStart(id,socketAgent,ws);return;}
+      if(data.type==='oauth-finish'){await this.oauthFinish(id,socketAgent,ws,data.nonce);return;}
       if(data.type==='pair') {
-        const reason=await this.denied('link',socketAgent.user,socketAgent.version||'');if(reason){ws.send(JSON.stringify({type:'error',message:reason}));return;}
+        const reason=await this.denied('link',socketAgent.user,socketAgent.version||'',socketAgent);if(reason){ws.send(JSON.stringify({type:'error',message:reason}));return;}
         if(await this.limited('pair-rate:'+id,5,60000)){ws.send(JSON.stringify({type:'error',message:'연결 코드는 1분에 최대 5번 생성할 수 있습니다.'}));return;}
         await this.store.delete('pending:'+id);
         const codes=await this.store.list({prefix:'code:'});for(const [key,v]of codes)if(v.agent===id)await this.store.delete(key);
@@ -209,7 +283,7 @@ export class RemoteHub extends DurableObject {
         if(!pending || pending.until<=Date.now() || pending.nonce!==data.nonce){ws.send(JSON.stringify({type:'error',message:'승인 요청이 만료되었습니다. 연결 코드를 다시 생성하세요.'}));return;}
         await this.store.delete('pending:'+id);
         if(data.type==='reject'){ws.send(JSON.stringify({type:'approval_cleared'}));return;}
-        const reason=await this.denied('link',pending.user,socketAgent.version||'');if(reason){ws.send(JSON.stringify({type:'approval_cleared'}));ws.send(JSON.stringify({type:'error',message:reason}));return;}
+        const reason=await this.denied('link',pending.user,socketAgent.version||'',socketAgent);if(reason){ws.send(JSON.stringify({type:'approval_cleared'}));ws.send(JSON.stringify({type:'error',message:reason}));return;}
         const prior=await this.store.get('user:'+pending.user);
         if(prior?.agent && prior.agent!==id)await this.unlink(prior.agent);
         await this.unlink(id);
@@ -256,7 +330,7 @@ export class RemoteHub extends DurableObject {
   async authorized(pending) {
     const records=await this.store.get(['agent:'+pending.agent,'user:'+pending.user]);
     const agent=records.get('agent:'+pending.agent),link=records.get('user:'+pending.user);
-    if(await this.denied(pending.kind==='capture'?'capture':'items',pending.user,agent?.version||''))return false;
+    if(await this.denied(pending.kind==='capture'?'capture':'items',pending.user,agent?.version||'',agent))return false;
     return agent?.user===pending.user&&link?.agent===pending.agent&&(agent.linkVersion??null)===(pending.linkVersion??null);
   }
   async complete(key,pending,content,image=null,sensitive=false) {
@@ -303,7 +377,7 @@ export class RemoteHub extends DurableObject {
       if(value.until<=Date.now())await this.expireRegistration(id,agent);else keep=true;
     }
     const globalRate=await this.store.get('registration-global');if(globalRate?.until<=Date.now())await this.store.delete('registration-global');else if(globalRate)keep=true;
-    for(const prefix of ['query:','code:','pending:','interaction:','rate:','reg:','pair-rate:','capture-rate:','capture-success:','busy:']) {
+    for(const prefix of ['oauth:','oauth-flow:','oauth-ready:','query:','code:','pending:','interaction:','rate:','reg:','pair-rate:','capture-rate:','capture-success:','busy:']) {
       const rows=await this.store.list({prefix});for(const [key,value]of rows){if(value.until<=Date.now())await this.store.delete(key);else keep=true;}
     }
     if(keep)await this.schedule();
