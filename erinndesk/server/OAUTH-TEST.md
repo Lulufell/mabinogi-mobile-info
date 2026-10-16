@@ -26,3 +26,6 @@
 ## 빌드 재현
 `python scripts/build-oauth-test.py --source <앱 소스 루트> --output <배포 출력 폴더> --stage <별도 oauth-test-source 폴더>`
 PyInstaller와 기존 앱 빌드 의존성이 필요합니다. 앱 소스의 정식 버전/상수는 변경하지 않습니다.
+
+## 인증 오류 확인
+서버 변경 후 오류 문구에 단계와 HTTP 상태가 표시됩니다. token/invalid_client는 Application ID와 OAuth2 Client Secret을 확인하고, token/invalid_grant는 이전 브라우저 탭을 새로고침하지 말고 앱에서 새 인증을 시작하세요. identity는 계정 조회 단계, timeout은 해당 단계 응답 시간 초과입니다. 외부 응답 전문/토큰/Secret은 사용자에게 표시하지 않습니다. 서버 변경만 배포하면 되며 테스트 EXE 재빌드는 필요하지 않습니다.

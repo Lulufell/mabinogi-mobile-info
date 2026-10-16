@@ -211,12 +211,26 @@ export class RemoteHub extends DurableObject {
     const fail=message=>{this.send(pending.agent,{type:'error',message});return html(message,400);};
     if(url.searchParams.has('error'))return fail('디스코드 로그인이 취소되었습니다.');
     const code=url.searchParams.get('code');if(!code||code.length>2048)return fail('인증 코드를 확인하지 못했습니다.');
-    let token;
+    let token,stage='token_request';
+    const requestHeaders={'User-Agent':'DiscordBot (https://github.com/Lulufell/mabinogi-mobile-info, 1.0)'};
+    const rejected=async(response,phase)=>{
+      let body;try{body=await response.json();}catch{}
+      const known=new Set(['invalid_client','invalid_grant','invalid_request','unauthorized_client','invalid_scope','unsupported_grant_type']);
+      const code=known.has(body?.error)?body.error:null;
+      const detail=code==='invalid_client'?'서버의 Discord Application ID와 OAuth2 Client Secret을 확인하세요.':code==='invalid_grant'?'인증 코드가 만료되었거나 사용되었습니다. 앱에서 새 로그인을 시작하세요.':response.status===429?'디스코드 요청 한도에 도달했습니다. 잠시 후 다시 시도하세요.':'잠시 후 앱에서 다시 시도하세요.';
+      return fail('디스코드 인증 실패 ['+phase+' / HTTP '+response.status+(code?' / '+code:'')+']. '+detail);
+    };
     try{
-      const response=await fetch('https://discord.com/api/v10/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:this.env.DISCORD_APPLICATION_ID,client_secret:this.env.DISCORD_CLIENT_SECRET,grant_type:'authorization_code',code,redirect_uri:this.env.OAUTH_REDIRECT_URI}),signal:AbortSignal.timeout(10000)});
-      if(!response.ok)throw Error();token=await response.json();if(typeof token.access_token!=='string'||!token.scope?.split(' ').includes('identify'))throw Error();
-      const identity=await fetch('https://discord.com/api/v10/users/@me',{headers:{Authorization:'Bearer '+token.access_token},signal:AbortSignal.timeout(10000)});if(!identity.ok)throw Error();
-      const user=await identity.json();if(!/^\d{17,22}$/.test(user.id)||typeof user.username!=='string')throw Error();
+      const response=await fetch('https://discord.com/api/v10/oauth2/token',{method:'POST',headers:{...requestHeaders,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:this.env.DISCORD_APPLICATION_ID,client_secret:this.env.DISCORD_CLIENT_SECRET,grant_type:'authorization_code',code,redirect_uri:this.env.OAUTH_REDIRECT_URI}),signal:AbortSignal.timeout(10000)});
+      if(!response.ok)return await rejected(response,'token');
+      stage='token_response';token=await response.json();
+      if(typeof token.access_token!=='string')return fail('디스코드 인증 실패 [token_response]. 인증 토큰 응답을 확인하지 못했습니다.');
+      if(typeof token.scope!=='string'||!token.scope.split(/\s+/).includes('identify'))return fail('디스코드 인증 실패 [identify_scope]. 계정 식별 권한을 승인한 뒤 다시 시도하세요.');
+      stage='identity_request';
+      const identity=await fetch('https://discord.com/api/v10/users/@me',{headers:{...requestHeaders,Authorization:'Bearer '+token.access_token},signal:AbortSignal.timeout(10000)});if(!identity.ok)return await rejected(identity,'identity');
+      stage='identity_response';
+      const user=await identity.json();if(!/^\d{17,22}$/.test(user.id)||typeof user.username!=='string')return fail('디스코드 인증 실패 [identity_response]. 계정 정보 응답을 확인하지 못했습니다.');
+      stage='link_prepare';
       return await this.ctx.blockConcurrencyWhile(async()=>{
       const current=await this.store.get('agent:'+pending.agent),flow=await this.store.get('oauth-flow:'+pending.agent);
       if(!current||current.session!==pending.session||flow?.state!==state||pending.until<=Date.now())return html('인증 요청이 변경되거나 만료되었습니다. 앱에서 다시 시작하세요.',409);
@@ -227,7 +241,7 @@ export class RemoteHub extends DurableObject {
       await this.store.delete('oauth-flow:'+pending.agent);
       this.send(pending.agent,{type:'oauth-ready',nonce});return html('디스코드 인증을 확인했습니다. Erinn Desk 앱에서 연결 결과를 확인하세요.');
       });
-    }catch{return fail('디스코드 인증을 완료하지 못했습니다. 앱에서 다시 시도하세요.');}
+    }catch(error){const timeout=error?.name==='TimeoutError'||error?.name==='AbortError';return fail('디스코드 인증 실패 ['+stage+(timeout?' / timeout':'')+']. '+(timeout?'응답 시간이 초과되었습니다. ':'')+'앱에서 다시 시도하세요.');}
     finally{if(token?.access_token)try{await fetch('https://discord.com/api/v10/oauth2/token/revoke',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:this.env.DISCORD_APPLICATION_ID,client_secret:this.env.DISCORD_CLIENT_SECRET,token:token.access_token,token_type_hint:'access_token'}),signal:AbortSignal.timeout(5000)});}catch{}}
   }
   async oauthFinish(id,agent,ws,nonce){

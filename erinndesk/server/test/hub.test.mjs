@@ -449,3 +449,14 @@ test('OAuth cancellation during network exchange and expired state cannot bind a
  assert.equal((await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+expired+'&code=x'))).status,400);
  const agent=await f.storage.get('agent:pc-a');agent.oauthTest=false;await f.storage.put('agent:pc-a',agent);await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'oauth-start'}));assert.match(f.socket.messages.at(-1).message,/테스트 빌드/);
 });
+
+test('OAuth errors identify safe failure stages without exposing Discord response secrets',async()=>{
+ for(const [status,body,pattern]of [[401,{error:'invalid_client',error_description:'SENSITIVE SECRET'},/token \/ HTTP 401 \/ invalid_client/],[400,{error:'invalid_grant',access_token:'SENSITIVE SECRET'},/invalid_grant/],[429,{error:'SENSITIVE SECRET'},/HTTP 429/]]){
+  const f=oauthFixture(),state=await oauthBegin(f),old=globalThis.fetch;globalThis.fetch=async()=>Response.json(body,{status});
+  try{const response=await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+state+'&code=x'));const text=await response.text();assert.match(text,pattern);assert(!text.includes('SENSITIVE SECRET'));assert.equal(f.socket.messages.at(-1).message,text);}finally{globalThis.fetch=old;}
+ }
+ for(const [mode,pattern]of [['scope',/identify_scope/],['identity',/identity \/ HTTP 401/],['timeout',/token_request \/ timeout/]]){
+  const f=oauthFixture(),state=await oauthBegin(f),old=globalThis.fetch;globalThis.fetch=async url=>{if(mode==='timeout')throw new DOMException('SENSITIVE SECRET','TimeoutError');if(String(url).endsWith('/oauth2/token'))return Response.json({access_token:'SENSITIVE SECRET',scope:mode==='scope'?'':'identify'});return Response.json({message:'SENSITIVE SECRET'},{status:401});};
+  try{const response=await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+state+'&code=x'));const text=await response.text();assert.match(text,pattern);assert(!text.includes('SENSITIVE SECRET'));}finally{globalThis.fetch=old;}
+ }
+});
