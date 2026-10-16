@@ -62,9 +62,25 @@ def api(path,body=None):
   except Exception:message='요청 실패'
   raise ValueError(f'운영 요청 실패 (HTTP {e.code}): {message}') from None
 
+def logical_policy(policy):
+ p=copy.deepcopy(policy)
+ if p.get('versionMode')=='recommend':
+  advice=p.get('versionAdvice',{})
+  p.update(scope='none',minimum=advice.get('minimum'),blocked=advice.get('blocked'))
+  p.pop('versionMode',None);p.pop('versionAdvice',None)
+ return p
+
+def wire_policy(policy):
+ p=copy.deepcopy(policy)
+ p.pop('versionMode',None);p.pop('versionAdvice',None)
+ if p.get('scope')=='none':
+  p['versionMode']='recommend';p['versionAdvice']={'minimum':p['minimum'],'blocked':p['blocked']}
+  p.update(scope='discord',minimum='0.0.0',blocked=[])
+ return p
+
 def seal(policy):
  key=Ed25519PrivateKey.from_private_bytes(bytes.fromhex(credentials()['private']))
- payload=json.dumps(policy,ensure_ascii=False,separators=(',',':'))
+ payload=json.dumps(wire_policy(policy),ensure_ascii=False,separators=(',',':'))
  return {'payload':payload,'signature':base64.b64encode(key.sign(payload.encode())).decode()}
 
 def defaults():
@@ -131,7 +147,7 @@ def menu():
      access['mode']=mode;configure_legacy(policy)
    elif choice=='3':
     policy['minimum']=input('최소 지원 버전: ').strip();policy['blocked']=[x.strip() for x in input('차단 버전 (쉼표 구분, 없으면 Enter): ').split(',') if x.strip()]
-    policy['scope']=input('제한 범위 discord / all: ').strip();policy['message']=input('사용자 안내: ').strip()
+    policy['scope']=input('제한 범위 none(권장 업데이트) / discord / all: ').strip();policy['message']=input('사용자 안내: ').strip()
     configure_legacy(policy)
    elif choice=='4':
     print(FEATURES);name=input('설정할 기능: ').strip()
@@ -153,7 +169,7 @@ def menu():
     history=api('/admin/history')
     for h in history:print(h['revision'],h['changedAt'],json.loads(h['envelope']['payload'])['latest'],h['access']['mode'])
     target=int(input('복원할 번호: '));record=next(h for h in history if h['revision']==target)
-    releases=policy['releases'];policy=json.loads(record['envelope']['payload']);policy['releases']={**releases,**policy['releases']};access=record['access']
+    releases=policy['releases'];policy=logical_policy(json.loads(record['envelope']['payload']));policy['releases']={**releases,**policy['releases']};access=record['access']
    elif choice=='7':pass
    else:continue
    publish(state,policy,access)

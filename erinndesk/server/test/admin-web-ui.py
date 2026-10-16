@@ -26,6 +26,8 @@ try:
   page.locator('#preview').click();page.locator('#commit').click();expect(page.locator('#draftStatus')).to_contain_text('운영 서버에 적용했습니다');expect(page.locator('#status')).not_to_contain_text('운영 서버에 적용했습니다');assert len(fixture.writes)==1
   expect(page.locator('#feature-capture')).not_to_be_checked()
   page.get_by_role('button',name='버전 관리',exact=True).click();file=Path(folder)/'ErinnDesk.exe';file.write_bytes(b'local fake EXE test fixture')
+  page.get_by_role('combobox',name='제한 범위',exact=True).click();page.get_by_role('option',name='제한 없음 · 업데이트 권장',exact=True).click()
+  page.locator('#preview').click();expect(page.locator('#changes')).to_contain_text('제한 없음 · 업데이트 권장');page.locator('#cancelApply').click()
   expect(page.locator('#releases')).to_contain_text('https://example.com/app.exe')
   page.locator('[data-version-url="1.4.9"]').click();expect(page.locator('#urlDialog')).to_be_visible()
   page.locator('#newReleaseUrl').fill('https://example.com/moved.exe');app.downloader.side_effect=ValueError('파일이 다릅니다.')

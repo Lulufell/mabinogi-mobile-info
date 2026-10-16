@@ -21,7 +21,7 @@ def validate(policy,access,now):
  for key in ('latest','minimum'):
   if not isinstance(policy.get(key),str) or not VERSION.fullmatch(policy[key]):raise ValueError('최신/최소 지원 버전 형식을 확인하세요.')
  if tuple(map(int,policy['minimum'].split('.')))>tuple(map(int,policy['latest'].split('.'))):raise ValueError('최소 지원 버전이 최신 버전보다 높습니다.')
- if policy.get('scope') not in ('discord','all'):raise ValueError('제한 범위를 확인하세요.')
+ if policy.get('scope') not in ('none','discord','all'):raise ValueError('제한 범위를 확인하세요.')
  if not isinstance(policy.get('blocked'),list) or len(policy['blocked'])>100 or any(not isinstance(v,str) or not VERSION.fullmatch(v) for v in policy['blocked']):raise ValueError('차단 버전 형식을 확인하세요.')
  if not isinstance(policy.get('message'),str) or len(policy['message'])>500:raise ValueError('업데이트 안내는 500자 이내로 입력하세요.')
  deadline=policy.get('legacyUntil',0)
@@ -102,7 +102,7 @@ class Application:
    if type(body.get('revision')) is not int:raise ValueError('복원할 이력을 선택하세요.')
    record=next((h for h in self.api('/admin/history') if h['revision']==body['revision']),None)
    if not record:raise ValueError('복원할 이력이 없습니다.')
-   policy=json.loads(record['envelope']['payload']);access=record['access']
+   policy=ops.logical_policy(json.loads(record['envelope']['payload']));access=record['access']
    policy['releases']={**(state.get('policy') or {}).get('releases',{}),**policy['releases']}
   else:policy=copy.deepcopy(body.get('policy'));access=copy.deepcopy(body.get('access'))
   if not isinstance(policy,dict):raise ValueError('운영 설정을 확인하세요.')
@@ -130,7 +130,7 @@ class Application:
   # Consume before network I/O: uncertain responses must never cause blind resubmission.
   return self.api('/admin/state',{'expectedRevision':plan['expectedRevision'],'envelope':self.sign(plan['policy']),'access':plan['access']})
  def history(self):
-  return [{'revision':r['revision'],'changedAt':r['changedAt'],'policy':json.loads(r['envelope']['payload']),'access':r['access']} for r in self.api('/admin/history')]
+  return [{'revision':r['revision'],'changedAt':r['changedAt'],'policy':ops.logical_policy(json.loads(r['envelope']['payload'])),'access':r['access']} for r in self.api('/admin/history')]
 
 class Handler(BaseHTTPRequestHandler):
  def log_message(self,*args):pass

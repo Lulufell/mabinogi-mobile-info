@@ -27,6 +27,10 @@ class AdminTests(unittest.TestCase):
   before=ops.credentials();cipher=(ops.ADMIN_DIR/'credentials.dat').read_bytes()
   self.assertNotIn(before['token'].encode(),cipher);self.assertNotIn(before['private'].encode(),cipher)
   ops.initialize();self.assertEqual(ops.credentials(),before)
+ def test_recommended_policy_is_signed_in_backward_compatible_form(self):
+  p=ops.defaults();p.update(scope='none',minimum='1.4.9',blocked=['1.4.9'])
+  wire=json.loads(ops.seal(p)['payload']);self.assertEqual(wire['scope'],'discord');self.assertEqual(wire['minimum'],'0.0.0');self.assertEqual(wire['blocked'],[])
+  self.assertEqual(ops.logical_policy(wire),p);self.assertEqual(p['scope'],'none')
  def test_signature_matches_exported_public_key(self):
   public=json.loads((ops.ROOT/'operations-public.json').read_text())['publicKey'];e=ops.seal({'fixture':'한글'})
   Ed25519PublicKey.from_public_bytes(bytes.fromhex(public)).verify(base64.b64decode(e['signature']),e['payload'].encode())

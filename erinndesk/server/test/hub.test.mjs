@@ -447,7 +447,7 @@ test('OAuth cancellation during network exchange and expired state cannot bind a
  try{assert.equal((await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+state+'&code=x'))).status,409);assert.equal(await f.storage.get('user:123456789012345678'),undefined);}finally{globalThis.fetch=old;}
  const expired=await oauthBegin(f),record=await f.storage.get('oauth:'+expired);record.until=Date.now()-1;await f.storage.put('oauth:'+expired,record);
  assert.equal((await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+expired+'&code=x'))).status,400);
- const agent=await f.storage.get('agent:pc-a');agent.oauthTest=false;await f.storage.put('agent:pc-a',agent);await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'oauth-start'}));assert.match(f.socket.messages.at(-1).message,/테스트 빌드/);
+ const agent=await f.storage.get('agent:pc-a');agent.oauthTest=false;await f.storage.put('agent:pc-a',agent);await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'oauth-start'}));assert.equal(f.socket.messages.at(-1).type,'oauth-url');
 });
 
 test('OAuth errors identify safe failure stages without exposing Discord response secrets',async()=>{
@@ -467,4 +467,50 @@ test('OAuth result pages render safely with consistent branding and accurate sta
   assert.equal(response.status,status);assert.match(response.headers.get('content-type'),/text\/html/);assert.equal(response.headers.get('cache-control'),'no-store');assert.match(response.headers.get('content-security-policy'),/default-src 'none'/);
   assert(html.includes(title));assert(html.includes('Erinn Desk'));assert(html.includes('이 탭은 닫아도 됩니다.'));assert(!html.includes('<script>'));assert(html.includes('&lt;script&gt;'));assert(!html.includes('연결 완료'));
  }
+});
+
+test('reauthenticating same account on same PC succeeds; refreshed callback is rejected',async()=>{
+ const f=oauthFixture(),state=await oauthBegin(f),mock=mockOAuth();
+ try{
+  let response=await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+state+'&code=first'));assert.equal(response.status,200);
+  await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'oauth-finish',nonce:f.socket.messages.at(-1).nonce}));
+  const previous=(await f.storage.get('agent:pc-a')).linkVersion;
+  await f.storage.put('query:preserve',{agent:'pc-a',user:'123456789012345678',until:Date.now()+60000});
+  await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'oauth-start'}));assert.equal(f.socket.messages.at(-1).type,'linked');assert.equal((await f.storage.get('agent:pc-a')).linkVersion,previous);assert(await f.storage.get('query:preserve'));
+  const next=crypto.randomUUID()+crypto.randomUUID();await f.storage.put('oauth:'+next,{agent:'pc-a',session:f.socket.session,until:Date.now()+300000});await f.storage.put('oauth-flow:pc-a',{state:next,until:Date.now()+300000});
+  response=await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+next+'&code=second'));assert.equal(response.status,200);assert((await response.text()).includes('이미 연결된 계정입니다'));
+  assert.equal(f.socket.messages.at(-1).type,'linked');
+  assert.equal((await f.storage.get('user:123456789012345678')).agent,'pc-a');assert.equal((await f.storage.get('agent:pc-a')).linkVersion,previous);
+  response=await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+next+'&code=second'));assert.equal(response.status,400);assert((await response.text()).includes('인증 요청이 만료되었습니다'));
+ }finally{mock.restore();}
+});
+test('conflicting PC renders failure; success page precedes final app policy check',async()=>{
+ const f=oauthFixture(),state=await oauthBegin(f),mock=mockOAuth();
+ try{
+  await f.storage.put('user:123456789012345678',{agent:'pc-b'});
+  let response=await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+state+'&code=first'));assert.equal(response.status,400);assert((await response.text()).includes('이미 다른 연결이 있습니다'));
+  await f.storage.delete('user:123456789012345678');await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'oauth-start'}));const next=new URL(f.socket.messages.at(-1).url).searchParams.get('state');
+  response=await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+next+'&code=second'));assert.equal(response.status,200);
+  const nonce=f.socket.messages.at(-1).nonce;f.hub.env.OAUTH_TEST_USERS='';await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'oauth-finish',nonce}));
+  assert.equal(f.socket.messages.at(-1).type,'error');assert.equal(await f.storage.get('user:123456789012345678'),undefined);
+ }finally{mock.restore();}
+});
+
+test('scope none permits old, explicitly blocked and versionless clients but keeps access/feature gates',async()=>{
+ const f=await operationsFixture();f.policy.scope='none';f.policy.blocked=['1.4.9'];await f.publish();
+ for(const v of ['0.0.1','1.4.9',''])assert.equal(await f.hub.denied('items','user-a',v),null);
+ const current=await f.storage.get('ops:current');current.access.mode='maintenance';await f.storage.put('ops:current',current);assert.match(await f.hub.denied('items','user-a','0.0.1'),/점검/);
+});
+test('OAuth stores avatar only on new login and sends it on reconnect',async()=>{
+ const f=oauthFixture(),state=await oauthBegin(f),old=globalThis.fetch;
+ globalThis.fetch=async url=>String(url).endsWith('/oauth2/token')?Response.json({access_token:'fixture',scope:'identify'}):String(url).endsWith('/users/@me')?Response.json({id:'123456789012345678',username:'tester',avatar:'a'.repeat(32)}):new Response('{}');
+ try{await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+state+'&code=x'));await f.hub.webSocketMessage(f.socket,JSON.stringify({type:'oauth-finish',nonce:f.socket.messages.at(-1).nonce}));assert.equal((await f.storage.get('agent:pc-a')).userAvatar,'https://cdn.discordapp.com/avatars/123456789012345678/'+'a'.repeat(32)+'.png?size=128');assert.equal(f.socket.messages.at(-1).linked.avatarUrl,(await f.storage.get('agent:pc-a')).userAvatar);}finally{globalThis.fetch=old;}
+ assert.match(f.hub.profileAvatar({id:'123456789012345678',avatar:null,discriminator:'0'}),/^https:\/\/cdn.discordapp.com\/embed\/avatars\/[0-5]\.png$/);
+ assert.equal(f.hub.profileAvatar({id:'evil',avatar:'<script>'}),null);
+});
+
+test('compatible recommend policy reads back original operator thresholds',async()=>{
+ const f=await operationsFixture();const minimum=f.policy.minimum;
+ f.policy={...f.policy,scope:'discord',minimum:'0.0.0',blocked:[],versionMode:'recommend',versionAdvice:{minimum,blocked:['1.4.9']}};await f.publish();
+ const state=await f.hub.policyState();assert.equal(state.policy.scope,'none');assert.equal(state.policy.minimum,minimum);assert.deepEqual(state.policy.blocked,['1.4.9']);assert.equal(await f.hub.denied('items','user-a','1.4.9'),null);
 });

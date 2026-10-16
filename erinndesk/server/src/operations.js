@@ -2,10 +2,16 @@
 export const FEATURES=['discord','link','items','capture'];
 export const version=v=>typeof v==='string'&&/^\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(v);
 export function compare(a,b){const x=a.split('.').map(Number),y=b.split('.').map(Number);for(let i=0;i<3;i++)if(x[i]!==y[i])return x[i]-y[i];return 0;}
+export function logicalPolicy(policy){
+ if(policy?.versionMode!=='recommend')return policy;
+ const {versionMode,versionAdvice,...p}=policy;
+ return {...p,scope:'none',minimum:versionAdvice?.minimum,blocked:versionAdvice?.blocked};
+}
 export function validatePolicy(p,now=Date.now()){
+ p=logicalPolicy(p);
  if(!p||p.schema!==1||!Number.isSafeInteger(p.revision)||p.revision<1)throw Error('정책 버전을 확인하세요.');
  if(!Number.isSafeInteger(p.issuedAt)||!Number.isSafeInteger(p.expiresAt)||p.issuedAt>now+300000||p.expiresAt<=now||p.expiresAt-p.issuedAt>90*86400000)throw Error('정책 유효기간은 최대 90일입니다.');
- if(!version(p.latest)||!version(p.minimum)||compare(p.minimum,p.latest)>0||!['discord','all'].includes(p.scope))throw Error('지원 버전을 확인하세요.');
+ if(!version(p.latest)||!version(p.minimum)||compare(p.minimum,p.latest)>0||!['none','discord','all'].includes(p.scope))throw Error('지원 버전을 확인하세요.');
  if(!Array.isArray(p.blocked)||p.blocked.length>100||p.blocked.some(v=>!version(v)))throw Error('차단 버전을 확인하세요.');
  if(p.legacyUntil!==undefined&&(!Number.isSafeInteger(p.legacyUntil)||p.legacyUntil<0||p.legacyUntil>p.expiresAt))throw Error('구버전 유예 종료는 정책 유효기간 이내의 시각이어야 합니다.');
  if(typeof p.message!=='string'||p.message.length>500)throw Error('안내 문구는 최대 500자입니다.');
@@ -43,7 +49,7 @@ export function denial(policy,access,feature,user,clientVersion){
  if(blockedUser)return '디스코드 기능 이용이 제한된 계정입니다.'+(blockedUser.reason.trim()?'\n사유 : '+blockedUser.reason.trim():'');
  if(user&&access?.mode==='allowlist'&&!access.users.some(u=>u.id===user))return '현재 허용된 사용자만 디스코드 기능을 이용할 수 있습니다.';
  const legacy=clientVersion===''&&Number.isSafeInteger(policy.legacyUntil)&&policy.legacyUntil>Date.now();
- if(clientVersion!==undefined&&!legacy&&(!version(clientVersion)||compare(clientVersion,policy.minimum)<0||policy.blocked.includes(clientVersion))){
+ if(policy.scope!=='none'&&clientVersion!==undefined&&!legacy&&(!version(clientVersion)||compare(clientVersion,policy.minimum)<0||policy.blocked.includes(clientVersion))){
   const message=policy.message||'새 버전의 Erinn Desk를 다운로드해 주세요.',url=policy.releases[policy.latest]?.url;
   return message+(url&&message.length+url.length<1900?'\n다운로드: '+url:'');
  }

@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { verifyEnvelope, validateAccess, denial } from './operations.js';
+import { verifyEnvelope, validateAccess, denial, version, compare, logicalPolicy } from './operations.js';
 import { json, reply, hash, verifyDiscord, validateName, formatItems } from './protocol.js';
 
 export default {
@@ -48,7 +48,7 @@ export class RemoteHub extends DurableObject {
   }
   async policyState() {
     const value=await this.store.get('ops:current');
-    return value ? {...value,policy:JSON.parse(value.envelope.payload)} : {policy:null,access:{mode:'all',users:[]},revision:0};
+    return value ? {...value,policy:logicalPolicy(JSON.parse(value.envelope.payload))} : {policy:null,access:{mode:'all',users:[]},revision:0};
   }
   async denied(feature,user,clientVersion,agent=null) {
     const state=await this.policyState();
@@ -131,7 +131,7 @@ export class RemoteHub extends DurableObject {
       for(const old of this.sockets(match[1]))old.close(4000,'Replaced');
       const pair=new WebSocketPair(),client=pair[0],server=pair[1];
       this.ctx.acceptWebSocket(server,[match[1]]);server.serializeAttachment({id:match[1],session});
-      server.send(JSON.stringify({type:'connected',linked:agent.user ? {id:agent.user,name:agent.userName} : null}));
+      server.send(JSON.stringify({type:'connected',linked:agent.user ? {id:agent.user,name:agent.userName,...(agent.userAvatar?{avatarUrl:agent.userAvatar}:{})} : null}));
       const pending=await this.store.get('pending:'+match[1]);
       if(pending?.until>Date.now())server.send(JSON.stringify({type:'approval',...pending}));
       return new Response(null,{status:101,webSocket:client});
@@ -167,7 +167,7 @@ export class RemoteHub extends DurableObject {
     }
     const link=await this.store.get('user:'+user.id);
     const linkedAgent=link&&await this.store.get('agent:'+link.agent);
-    if(!link||linkedAgent?.user!==user.id)return finish(reply('연결된 PC가 없습니다. PC에서 코드를 생성한 뒤 /연결을 사용하세요.'));
+    if(!link||linkedAgent?.user!==user.id)return finish(reply('연결된 PC가 없습니다. Erinn Desk 앱에서 디스코드로 연결을 눌러 로그인해 주세요.'));
     if(command==='연결해제') {await this.unlink(link.agent);return finish(reply('PC 연결을 해제했습니다.'));}
     const policyReason=await this.denied(command==='스크린샷'?'capture':command==='아이템'?'items':'discord',user.id,linkedAgent.version||'',linkedAgent);if(policyReason)return finish(reply(policyReason));
     if(command==='연결상태')return finish(reply(this.sockets(link.agent).length?'PC와 연결되어 있습니다. /아이템으로 수량을 조회하세요.':'등록된 PC가 오프라인입니다. 게임과 에린 데스크를 켜 주세요.'));
@@ -183,14 +183,20 @@ export class RemoteHub extends DurableObject {
     this.send(link.agent,{type:screenshot?'capture':'query',id:data.id,user:user.id,...(!screenshot?{name:options['이름'].trim()}:{}),until:pending.until});
     return finish(json({type:5,data:{flags:64}}));
   }
+  profileAvatar(user){
+    if(!/^\d{17,22}$/.test(user.id))return null;
+    if(typeof user.avatar==='string'&&/^(a_)?[a-f0-9]{32}$/.test(user.avatar))return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`;
+    const index=/^\d{4}$/.test(user.discriminator||'')&&user.discriminator!=='0000'?Number(user.discriminator)%5:Number((BigInt(user.id)>>22n)%6n);
+    return `https://cdn.discordapp.com/embed/avatars/${index}.png`;
+  }
   oauthConfigured(){
     try{const u=new URL(this.env.OAUTH_REDIRECT_URI);return Boolean(this.env.DISCORD_CLIENT_SECRET&&u.protocol==='https:'&&u.pathname==='/oauth/callback'&&!u.search&&!u.hash&&!u.username&&!u.password);}catch{return false;}
   }
   async oauthStart(id,agent,ws){
     const fail=message=>ws.send(JSON.stringify({type:'error',message}));
-    if(!agent.oauthTest)return fail('OAuth 테스트 빌드에서만 사용할 수 있습니다.');
     if(!this.oauthConfigured())return fail('디스코드 로그인 인증이 서버에 설정되지 않았습니다.');
     const reason=await this.denied('link',agent.user,agent.version||'',agent);if(reason)return fail(reason);
+    if(agent.user&&(await this.store.get('user:'+agent.user))?.agent===id){ws.send(JSON.stringify({type:'linked',unchanged:true,linked:{id:agent.user,name:agent.userName,...(agent.userAvatar?{avatarUrl:agent.userAvatar}:{})}}));return;}
     if(await this.limited('pair-rate:'+id,5,60000))return fail('잠시 후 다시 연결해 주세요.');
     for(const [key,value]of await this.store.list({prefix:'oauth:'}))if(value.agent===id)await this.store.delete(key);
     await this.store.delete('oauth-ready:'+id);
@@ -237,7 +243,8 @@ export class RemoteHub extends DurableObject {
       const reason=await this.denied('link',user.id,current.version||'',current);if(reason)return fail(reason);
       const prior=await this.store.get('user:'+user.id);
       if((current.user&&current.user!==user.id)||(prior&&prior.agent!==pending.agent))return fail('이미 다른 연결이 있습니다. 기존 연결을 해제한 뒤 다시 시도하세요.');
-      const nonce=crypto.randomUUID();await this.store.put('oauth-ready:'+pending.agent,{nonce,user:user.id,name:(user.global_name||user.username).slice(0,100),session:pending.session,until:Date.now()+60000});await this.schedule();
+      if(current.user===user.id&&prior?.agent===pending.agent){await this.store.delete('oauth-flow:'+pending.agent);this.send(pending.agent,{type:'linked',unchanged:true,linked:{id:current.user,name:current.userName,...(current.userAvatar?{avatarUrl:current.userAvatar}:{})}});return html('이 PC는 해당 디스코드 계정과 이미 연결되어 있습니다.\n기존 연결을 그대로 유지합니다.',200,'already');}
+      const nonce=crypto.randomUUID();await this.store.put('oauth-ready:'+pending.agent,{nonce,user:user.id,name:(user.global_name||user.username).slice(0,100),avatarUrl:this.profileAvatar(user),session:pending.session,until:Date.now()+60000});await this.schedule();
       await this.store.delete('oauth-flow:'+pending.agent);
       this.send(pending.agent,{type:'oauth-ready',nonce});return html('Erinn Desk에서 연결을 마무리하고 있습니다.\n앱에서 연결 상태를 확인해 주세요.');
       });
@@ -251,16 +258,17 @@ export class RemoteHub extends DurableObject {
     const reason=await this.denied('link',ready.user,agent.version||'',agent);if(reason){ws.send(JSON.stringify({type:'error',message:reason}));return;}
     const prior=await this.store.get('user:'+ready.user);
     if((prior&&prior.agent!==id)||(agent.user&&agent.user!==ready.user)){ws.send(JSON.stringify({type:'error',message:'기존 연결을 해제한 뒤 다시 시도하세요.'}));return;}
+    if(agent.user===ready.user&&prior?.agent===id){ws.send(JSON.stringify({type:'linked',unchanged:true,linked:{id:agent.user,name:agent.userName,...(agent.userAvatar?{avatarUrl:agent.userAvatar}:{})}}));return;}
     await this.unlink(id);agent=await this.store.get('agent:'+id);
-    agent.user=ready.user;agent.userName=ready.name;agent.linkVersion=crypto.randomUUID();agent.approvedAt=Date.now();delete agent.registrationUntil;
+    agent.user=ready.user;agent.userName=ready.name;agent.userAvatar=ready.avatarUrl;agent.linkVersion=crypto.randomUUID();agent.approvedAt=Date.now();delete agent.registrationUntil;
     await this.store.delete('unapproved:'+id);await this.store.put('agent:'+id,agent);await this.store.put('user:'+ready.user,{agent:id});
-    ws.send(JSON.stringify({type:'linked',linked:{id:ready.user,name:ready.name}}));
+    ws.send(JSON.stringify({type:'linked',linked:{id:ready.user,name:ready.name,...(ready.avatarUrl?{avatarUrl:ready.avatarUrl}:{})}}));
   }
   async unlink(id) {
     const agent=await this.store.get('agent:'+id);if(!agent)return;
     if(agent.user&&(await this.store.get('user:'+agent.user))?.agent===id)await this.store.delete('user:'+agent.user);
     agent.linkVersion=crypto.randomUUID();
-    delete agent.user;delete agent.userName;await this.store.put('agent:'+id,agent);
+    delete agent.user;delete agent.userName;delete agent.userAvatar;await this.store.put('agent:'+id,agent);
     await this.store.delete('pending:'+id);
     await this.store.delete('oauth-ready:'+id);
     await this.store.delete('oauth-flow:'+id);
@@ -282,6 +290,7 @@ export class RemoteHub extends DurableObject {
       if(await this.expireRegistration(id,socketAgent))return;
       if(data.type==='oauth-start'){await this.oauthStart(id,socketAgent,ws);return;}
       if(data.type==='oauth-finish'){await this.oauthFinish(id,socketAgent,ws,data.nonce);return;}
+      if(['pair','approve','reject'].includes(data.type)&&version(socketAgent.version)&&compare(socketAgent.version,'1.5.1')>=0){ws.send(JSON.stringify({type:'error',message:'앱의 디스코드로 연결 버튼을 사용해 주세요.'}));return;}
       if(data.type==='pair') {
         const reason=await this.denied('link',socketAgent.user,socketAgent.version||'',socketAgent);if(reason){ws.send(JSON.stringify({type:'error',message:reason}));return;}
         if(await this.limited('pair-rate:'+id,5,60000)){ws.send(JSON.stringify({type:'error',message:'연결 코드는 1분에 최대 5번 생성할 수 있습니다.'}));return;}
@@ -401,7 +410,7 @@ export class RemoteHub extends DurableObject {
 
 export function oauthResultPage(message,status=200,kind=''){
   const success=status<400,cancelled=kind==='cancel';
-  const title=success?'디스코드 인증 완료':cancelled?'인증을 취소했습니다':'디스코드 인증 확인 필요';
+  const title=kind==='already'?'이미 연결된 계정입니다':success?'디스코드 인증 완료':cancelled?'인증을 취소했습니다':'디스코드 인증 확인 필요';
   const escape=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const paragraphs=String(message).split('\n').map(line=>'<p>'+escape(line)+'</p>').join('');
   const body=`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>${title} · Erinn Desk</title><style>

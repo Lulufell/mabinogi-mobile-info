@@ -25,7 +25,10 @@
 
 ## 빌드 재현
 `python scripts/build-oauth-test.py --source <앱 소스 루트> --output <배포 출력 폴더> --stage <별도 oauth-test-source 폴더>`
-PyInstaller와 기존 앱 빌드 의존성이 필요합니다. 앱 소스의 정식 버전/상수는 변경하지 않습니다.
+PyInstaller와 기존 앱 빌드 의존성이 필요합니다. 앱 소스의 정식 버전/상수는 변경하지 않습니다.응 
 
 ## 인증 오류 확인
 서버 변경 후 오류 문구에 단계와 HTTP 상태가 표시됩니다. token/invalid_client는 Application ID와 OAuth2 Client Secret을 확인하고, token/invalid_grant는 이전 브라우저 탭을 새로고침하지 말고 앱에서 새 인증을 시작하세요. identity는 계정 조회 단계, timeout은 해당 단계 응답 시간 초과입니다. 외부 응답 전문/토큰/Secret은 사용자에게 표시하지 않습니다. 서버 변경만 배포하면 되며 테스트 EXE 재빌드는 필요하지 않습니다.
+
+
+1.5.1 개발 지속: 새 UI는 OAuth만 제공하며 연결된 상태에서 로그인 버튼을 숨깁니다. 서버는 구버전 호환용 코드 연결을 유지하고 1.5.1에서는 코드 생성/승인을 거절합니다. 같은 PC/계정 재인증은 linkVersion과 진행 조회를 유지합니다. 최근 조회는 세션 내20건, 5행 스크롤, 확인 후 목록만 삭제합니다. 원격 조회 OFF는 계정 연결을 유지합니다. 개발 버전 관리 상세는 DEVELOPMENT-VERSIONS.md를 참고하세요.
