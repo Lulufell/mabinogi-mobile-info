@@ -8,7 +8,7 @@ const code=(await fs.readFile(new URL('../src/worker.js',import.meta.url),'utf8'
  .replace("import { DurableObject } from 'cloudflare:workers';",'class DurableObject {constructor(ctx,env){this.ctx=ctx;this.env=env;}}')
  .replace("'./operations.js'",JSON.stringify(new URL('../src/operations.js',import.meta.url).href))
  .replace("'./protocol.js'",JSON.stringify(new URL('../src/protocol.js',import.meta.url).href));
-const {RemoteHub,default:Worker}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
+const {RemoteHub,oauthResultPage,default:Worker}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
 class Storage{
  values=new Map();alarm=null;
  async get(k){return Array.isArray(k)?new Map(k.filter(key=>this.values.has(key)).map(key=>[key,structuredClone(this.values.get(key))])):structuredClone(this.values.get(k));}
@@ -453,10 +453,18 @@ test('OAuth cancellation during network exchange and expired state cannot bind a
 test('OAuth errors identify safe failure stages without exposing Discord response secrets',async()=>{
  for(const [status,body,pattern]of [[401,{error:'invalid_client',error_description:'SENSITIVE SECRET'},/token \/ HTTP 401 \/ invalid_client/],[400,{error:'invalid_grant',access_token:'SENSITIVE SECRET'},/invalid_grant/],[429,{error:'SENSITIVE SECRET'},/HTTP 429/]]){
   const f=oauthFixture(),state=await oauthBegin(f),old=globalThis.fetch;globalThis.fetch=async()=>Response.json(body,{status});
-  try{const response=await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+state+'&code=x'));const text=await response.text();assert.match(text,pattern);assert(!text.includes('SENSITIVE SECRET'));assert.equal(f.socket.messages.at(-1).message,text);}finally{globalThis.fetch=old;}
+  try{const response=await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+state+'&code=x'));const text=await response.text();assert.match(text,pattern);assert(!text.includes('SENSITIVE SECRET'));assert(text.includes(f.socket.messages.at(-1).message));}finally{globalThis.fetch=old;}
  }
  for(const [mode,pattern]of [['scope',/identify_scope/],['identity',/identity \/ HTTP 401/],['timeout',/token_request \/ timeout/]]){
   const f=oauthFixture(),state=await oauthBegin(f),old=globalThis.fetch;globalThis.fetch=async url=>{if(mode==='timeout')throw new DOMException('SENSITIVE SECRET','TimeoutError');if(String(url).endsWith('/oauth2/token'))return Response.json({access_token:'SENSITIVE SECRET',scope:mode==='scope'?'':'identify'});return Response.json({message:'SENSITIVE SECRET'},{status:401});};
   try{const response=await f.hub.fetch(new Request('https://example.com/oauth/callback?state='+state+'&code=x'));const text=await response.text();assert.match(text,pattern);assert(!text.includes('SENSITIVE SECRET'));}finally{globalThis.fetch=old;}
+ }
+});
+
+test('OAuth result pages render safely with consistent branding and accurate status',async()=>{
+ for(const [status,kind,title]of [[200,'','디스코드 인증 완료'],[400,'cancel','인증을 취소했습니다'],[503,'','디스코드 인증 확인 필요']]){
+  const response=oauthResultPage('<script>alert("secret")</script>\n다시 확인하세요.',status,kind),html=await response.text();
+  assert.equal(response.status,status);assert.match(response.headers.get('content-type'),/text\/html/);assert.equal(response.headers.get('cache-control'),'no-store');assert.match(response.headers.get('content-security-policy'),/default-src 'none'/);
+  assert(html.includes(title));assert(html.includes('Erinn Desk'));assert(html.includes('이 탭은 닫아도 됩니다.'));assert(!html.includes('<script>'));assert(html.includes('&lt;script&gt;'));assert(!html.includes('연결 완료'));
  }
 });

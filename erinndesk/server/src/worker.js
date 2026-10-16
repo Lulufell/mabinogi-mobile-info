@@ -200,7 +200,7 @@ export class RemoteHub extends DurableObject {
     ws.send(JSON.stringify({type:'oauth-url',url:url.href}));
   }
   async oauthCallback(request){
-    const html=(text,status=200)=>new Response(text,{status,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'}});
+    const html=(text,status=200,kind='')=>oauthResultPage(text,status,kind);
     if(!this.oauthConfigured())return html('인증 설정이 준비되지 않았습니다.',503);
     const url=new URL(request.url),state=url.searchParams.get('state')||'';
     if(!/^[a-f0-9-]{72}$/.test(state))return html('올바르지 않은 인증 요청입니다.',400);
@@ -208,8 +208,8 @@ export class RemoteHub extends DurableObject {
     if(!pending||pending.until<=Date.now())return html('인증 요청이 만료되었습니다. 앱에서 다시 시작하세요.',400);
     const agent=await this.store.get('agent:'+pending.agent);
     if(!agent||agent.session!==pending.session||!this.sockets(pending.agent).length)return html('앱 연결이 변경되었습니다. 앱에서 다시 시작하세요.',409);
-    const fail=message=>{this.send(pending.agent,{type:'error',message});return html(message,400);};
-    if(url.searchParams.has('error'))return fail('디스코드 로그인이 취소되었습니다.');
+    const fail=(message,kind='')=>{this.send(pending.agent,{type:'error',message});return html(message,400,kind);};
+    if(url.searchParams.has('error'))return fail('디스코드 로그인이 취소되었습니다.\n다시 연결하려면 앱에서 로그인을 시작해 주세요.','cancel');
     const code=url.searchParams.get('code');if(!code||code.length>2048)return fail('인증 코드를 확인하지 못했습니다.');
     let token,stage='token_request';
     const requestHeaders={'User-Agent':'DiscordBot (https://github.com/Lulufell/mabinogi-mobile-info, 1.0)'};
@@ -239,7 +239,7 @@ export class RemoteHub extends DurableObject {
       if((current.user&&current.user!==user.id)||(prior&&prior.agent!==pending.agent))return fail('이미 다른 연결이 있습니다. 기존 연결을 해제한 뒤 다시 시도하세요.');
       const nonce=crypto.randomUUID();await this.store.put('oauth-ready:'+pending.agent,{nonce,user:user.id,name:(user.global_name||user.username).slice(0,100),session:pending.session,until:Date.now()+60000});await this.schedule();
       await this.store.delete('oauth-flow:'+pending.agent);
-      this.send(pending.agent,{type:'oauth-ready',nonce});return html('디스코드 인증을 확인했습니다. Erinn Desk 앱에서 연결 결과를 확인하세요.');
+      this.send(pending.agent,{type:'oauth-ready',nonce});return html('Erinn Desk에서 연결을 마무리하고 있습니다.\n앱에서 연결 상태를 확인해 주세요.');
       });
     }catch(error){const timeout=error?.name==='TimeoutError'||error?.name==='AbortError';return fail('디스코드 인증 실패 ['+stage+(timeout?' / timeout':'')+']. '+(timeout?'응답 시간이 초과되었습니다. ':'')+'앱에서 다시 시도하세요.');}
     finally{if(token?.access_token)try{await fetch('https://discord.com/api/v10/oauth2/token/revoke',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:this.env.DISCORD_APPLICATION_ID,client_secret:this.env.DISCORD_CLIENT_SECRET,token:token.access_token,token_type_hint:'access_token'}),signal:AbortSignal.timeout(5000)});}catch{}}
@@ -396,4 +396,16 @@ export class RemoteHub extends DurableObject {
     }
     if(keep)await this.schedule();
   }
+}
+
+
+export function oauthResultPage(message,status=200,kind=''){
+  const success=status<400,cancelled=kind==='cancel';
+  const title=success?'디스코드 인증 완료':cancelled?'인증을 취소했습니다':'디스코드 인증 확인 필요';
+  const escape=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const paragraphs=String(message).split('\n').map(line=>'<p>'+escape(line)+'</p>').join('');
+  const body=`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>${title} · Erinn Desk</title><style>
+:root{color-scheme:dark;font-family:'Segoe UI','Malgun Gothic',sans-serif;background:#151618;color:#e4cfa8}*{box-sizing:border-box}body{margin:0;min-height:100vh;min-height:100svh;display:grid;place-items:center;padding:32px 20px}main{width:100%;max-width:510px}header{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:28px}.logo{position:relative;width:43px;height:46px;border-radius:13px;background:#dec183;color:#352a17;font:42px/43px Georgia,serif;text-align:center}.logo:after{content:'✦';position:absolute;right:3px;top:0;font:13px/16px Georgia,serif;color:#fff9e9}.brand{font:32px/1 Georgia,serif;letter-spacing:-1px}.brand small{display:block;font:9px/1.4 'Segoe UI',sans-serif;letter-spacing:5px;margin-top:7px;padding-left:2px}article{background:#202225;border:1px solid #3e4145;border-radius:20px;padding:38px 28px 28px;text-align:center}.status-icon{display:grid;place-items:center;width:52px;height:52px;margin:0 auto 22px;border-radius:50%;font-size:26px;background:#dec1831a;color:#dec183}.failure .status-icon{background:#f0a39b12;color:#f0a39b}.cancel .status-icon{background:#dec1831a;color:#dec183}h1{font-size:23px;line-height:1.5;margin:0 0 18px;font-weight:600;letter-spacing:-.6px}.message{font-size:14px;line-height:1.9;color:#bcaa8e;overflow-wrap:anywhere}.message p{margin:0}.note{border-top:1px solid #3e4145;margin:28px 0 0;padding-top:21px;color:#bcaa8e;font-size:12px;line-height:1.8}footer{text-align:center;margin-top:20px;font-size:11px;color:#918574}@media(max-width:420px){article{padding:30px 20px 24px}h1{font-size:21px}}
+</style></head><body><main><header aria-label="Erinn Desk"><span class="logo" aria-hidden="true">e</span><div class="brand">erinn<small>DESK</small></div></header><article class="${success?'success':cancelled?'cancel':'failure'}"><div class="status-icon" aria-hidden="true">${success?'✓':cancelled?'−':'!'}</div><h1>${title}</h1><div class="message">${paragraphs}</div><p class="note">이 탭은 닫아도 됩니다.</p></article><footer>Erinn Desk · 디스코드 연결</footer></main></body></html>`;
+  return new Response(body,{status,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"}});
 }
